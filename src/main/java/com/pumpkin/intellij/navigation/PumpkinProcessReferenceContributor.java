@@ -16,6 +16,9 @@ import org.jetbrains.plugins.cucumber.psi.GherkinStep;
 public class PumpkinProcessReferenceContributor extends PsiReferenceContributor {
 
     private static final String PROCESS_PREFIX = "Process: ";
+    // Mirrors GherkinPsiUtil's suffixes so the reference range covers only the process name.
+    private static final String WITH_DATA_SUFFIX = " with data";
+    private static final String WITHOUT_DATA_SUFFIX = " without data";
 
     @Override
     public void registerReferenceProviders(@NotNull PsiReferenceRegistrar registrar) {
@@ -41,6 +44,15 @@ public class PumpkinProcessReferenceContributor extends PsiReferenceContributor 
                         // into a data table that may be part of the step's PSI text.
                         int newlineIdx = fullText.indexOf('\n', invocationStart);
                         int invocationEnd = newlineIdx >= 0 ? newlineIdx : fullText.length();
+
+                        // Exclude the trailing " with data"/" without data" marker, if present,
+                        // so the clickable range covers only the process name.
+                        String invocationLine = fullText.substring(invocationStart, invocationEnd);
+                        if (invocationLine.endsWith(WITH_DATA_SUFFIX)) {
+                            invocationEnd -= WITH_DATA_SUFFIX.length();
+                        } else if (invocationLine.endsWith(WITHOUT_DATA_SUFFIX)) {
+                            invocationEnd -= WITHOUT_DATA_SUFFIX.length();
+                        }
                         if (invocationStart >= invocationEnd) return PsiReference.EMPTY_ARRAY;
 
                         TextRange range = new TextRange(invocationStart, invocationEnd);

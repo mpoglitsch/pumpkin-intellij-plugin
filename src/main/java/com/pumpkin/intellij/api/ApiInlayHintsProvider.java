@@ -3,30 +3,35 @@ package com.pumpkin.intellij.api;
 import com.intellij.codeInsight.hints.*;
 import com.intellij.codeInsight.hints.presentation.InlayPresentation;
 import com.intellij.codeInsight.hints.presentation.PresentationFactory;
+import com.intellij.codeInsight.hints.presentation.StaticDelegatePresentation;
 import com.intellij.icons.AllIcons;
 import com.intellij.openapi.editor.Editor;
+import com.intellij.openapi.editor.markup.TextAttributes;
 import com.intellij.openapi.fileEditor.FileEditorManager;
 import com.intellij.openapi.project.DumbService;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.util.TextRange;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.psi.*;
+import com.intellij.util.PsiNavigateUtil;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.jetbrains.plugins.cucumber.psi.GherkinFile;
 import org.jetbrains.plugins.cucumber.psi.GherkinStep;
 
 import javax.swing.*;
+import java.awt.*;
 
 /**
  * Shows a small rounded tag above each Gherkin step that matches the API send pattern.
  *
  * <p>The tag line contains:
  * <ul>
- *   <li>An API tag with the HTTP method and path resolved from the proxy's endpoint enum.</li>
- *   <li>Optionally, a clickable template-file tag when the endpoint has a body template
- *       defined via {@code @Value("classpath:…")} in the proxy's {@code getBodyTemplate}
- *       switch. Clicking the tag opens the template file in the editor.</li>
+ *   <li>An API tag (bold) with the HTTP method and path resolved from the proxy's endpoint
+ *       enum. Clicking the tag navigates to that enum constant.</li>
+ *   <li>Optionally, a clickable template-file tag (not bold) when the endpoint has a body
+ *       template defined via {@code @Value("classpath:…")} in the proxy's
+ *       {@code getBodyTemplate} switch. Clicking the tag opens the template file in the editor.</li>
  * </ul>
  *
  * <pre>
@@ -101,12 +106,17 @@ public class ApiInlayHintsProvider implements InlayHintsProvider<NoSettings> {
 
                 PresentationFactory factory = getFactory();
 
-                // Primary tag: [🏷 METHOD /path]
+                // Primary tag: [🏷 METHOD /path] — bold, clicking navigates to the matched
+                // endpoint enum constant instead of the step text carrying the link.
                 InlayPresentation apiTag = factory.roundWithBackground(
                         factory.seq(
                                 factory.smallScaledIcon(AllIcons.Nodes.Tag),
-                                factory.smallText(" " + methodAndPath[0] + " " + methodAndPath[1])
+                                bold(factory.smallText(" " + methodAndPath[0] + " " + methodAndPath[1]))
                         )
+                );
+                apiTag = factory.referenceOnHover(
+                        apiTag,
+                        (event, point) -> PsiNavigateUtil.navigate(endpoint)
                 );
 
                 // Optional secondary tag: clickable template filename
@@ -138,7 +148,7 @@ public class ApiInlayHintsProvider implements InlayHintsProvider<NoSettings> {
             return factory.seq(factory.text(indent), apiTag);
         }
 
-        // Template tag: [📄 filename.json] — clicking opens the file.
+        // Template tag: [📄 filename.json] — not bold, clicking opens the file.
         String filename = templateFile.getName();
         InlayPresentation fileLabel = factory.roundWithBackground(
                 factory.seq(
@@ -157,6 +167,22 @@ public class ApiInlayHintsProvider implements InlayHintsProvider<NoSettings> {
                 factory.smallText("   "),
                 fileTag
         );
+    }
+
+    /**
+     * Wraps a presentation so its text is painted bold, regardless of which
+     * {@link TextAttributes} the surrounding presentation chain supplies.
+     */
+    @NotNull
+    private static InlayPresentation bold(@NotNull InlayPresentation base) {
+        return new StaticDelegatePresentation(base) {
+            @Override
+            public void paint(@NotNull Graphics2D g, @NotNull TextAttributes attributes) {
+                TextAttributes boldAttributes = attributes.clone();
+                boldAttributes.setFontType(Font.BOLD);
+                super.paint(g, boldAttributes);
+            }
+        };
     }
 
     /**

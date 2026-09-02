@@ -16,6 +16,10 @@ import org.jetbrains.plugins.cucumber.psi.GherkinTag;
 public final class GherkinPsiUtil {
 
     private static final String PROCESS_PREFIX = "Process: ";
+    // The step definitions expose two step patterns distinguished by this trailing text:
+    // "^Process: (.*) with data$" (takes a DataTable) and "^Process: (.*) without data$" (no table).
+    private static final String WITH_DATA_SUFFIX = " with data";
+    private static final String WITHOUT_DATA_SUFFIX = " without data";
     // GherkinTag.getName() returns getText(), which INCLUDES the '@' prefix.
     private static final String PUMPKIN_TAG = "@pumpkin";
     private static final String PROCESS_REQUIRED_PREFIX = "@processRequired(";
@@ -36,13 +40,29 @@ public final class GherkinPsiUtil {
     }
 
     /**
-     * Returns the invocation text: everything after {@code "Process: "} in the step name,
+     * Returns the invocation text: everything after {@code "Process: "} in the step name
+     * and before the trailing {@code " with data"}/{@code " without data"} marker (if present),
      * or {@code null} if the step is not a Process step.
      */
     public static @Nullable String getProcessInvocationText(@NotNull GherkinStep step) {
         String name = step.getName();
         if (name == null || !name.startsWith(PROCESS_PREFIX)) return null;
-        return name.substring(PROCESS_PREFIX.length());
+        String invocation = name.substring(PROCESS_PREFIX.length());
+        return stripDataSuffix(invocation);
+    }
+
+    /**
+     * Strips a trailing {@code " with data"}/{@code " without data"} marker from the invocation
+     * text, if present. Steps without a marker are returned unchanged.
+     */
+    private static @NotNull String stripDataSuffix(@NotNull String invocation) {
+        if (invocation.endsWith(WITH_DATA_SUFFIX)) {
+            return invocation.substring(0, invocation.length() - WITH_DATA_SUFFIX.length());
+        }
+        if (invocation.endsWith(WITHOUT_DATA_SUFFIX)) {
+            return invocation.substring(0, invocation.length() - WITHOUT_DATA_SUFFIX.length());
+        }
+        return invocation;
     }
 
     // -------------------------------------------------------------------------

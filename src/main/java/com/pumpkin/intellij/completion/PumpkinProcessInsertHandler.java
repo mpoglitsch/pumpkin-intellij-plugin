@@ -49,8 +49,10 @@ public class PumpkinProcessInsertHandler implements InsertHandler<LookupElement>
 
         // Build the text to insert (invocation line + optional table).
         String processText = buildProcessText(def);
-        String tableText   = buildTableText(def, step);
-        String insertText  = processText + tableText;
+        boolean hasTable    = !def.getRequiredParameters().isEmpty();
+        String dataSuffix   = hasTable ? " with data" : " without data";
+        String tableText    = buildTableText(def, step);
+        String insertText   = processText + dataSuffix + tableText;
 
         document.replaceString(replaceStart, replaceEnd, insertText);
 
