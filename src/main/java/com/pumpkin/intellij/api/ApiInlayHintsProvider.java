@@ -5,7 +5,11 @@ import com.intellij.codeInsight.hints.presentation.InlayPresentation;
 import com.intellij.codeInsight.hints.presentation.PresentationFactory;
 import com.intellij.icons.AllIcons;
 import com.intellij.openapi.editor.Editor;
+import com.intellij.openapi.fileEditor.FileEditorManager;
 import com.intellij.openapi.project.DumbService;
+import com.intellij.openapi.project.Project;
+import com.intellij.openapi.util.TextRange;
+import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.psi.*;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -15,15 +19,20 @@ import org.jetbrains.plugins.cucumber.psi.GherkinStep;
 import javax.swing.*;
 
 /**
- * Shows a small rounded tag above each Gherkin step that matches the API send pattern,
- * displaying the HTTP method and path resolved from the proxy's endpoint enum:
+ * Shows a small rounded tag above each Gherkin step that matches the API send pattern.
+ *
+ * <p>The tag line contains:
+ * <ul>
+ *   <li>An API tag with the HTTP method and path resolved from the proxy's endpoint enum.</li>
+ *   <li>Optionally, a clickable template-file tag when the endpoint has a body template
+ *       defined via {@code @Value("classpath:…")} in the proxy's {@code getBodyTemplate}
+ *       switch. Clicking the tag opens the template file in the editor.</li>
+ * </ul>
  *
  * <pre>
- *   [tag icon] POST /redisJobs/{jobId}/start
+ *   [🏷 POST /redisJobs/{jobId}/start]  [📄 startJob.json]
  *   When I send a redis job start request to BACKEND_API including these parameters
  * </pre>
- *
- * <p>Enabled by default; can be toggled in Settings → Editor → Inlay Hints.
  */
 public class ApiInlayHintsProvider implements InlayHintsProvider<NoSettings> {
 
@@ -47,7 +56,7 @@ public class ApiInlayHintsProvider implements InlayHintsProvider<NoSettings> {
     @NotNull
     @Override
     public ImmediateConfigurable createConfigurable(@NotNull NoSettings settings) {
-        return listener -> new JPanel(); // no per-provider settings UI
+        return listener -> new JPanel();
     }
 
     @NotNull
@@ -84,18 +93,70 @@ public class ApiInlayHintsProvider implements InlayHintsProvider<NoSettings> {
                 String[] methodAndPath = extractMethodAndPath(endpoint);
                 if (methodAndPath == null) return true;
 
+                // Derive indentation from the step's position in the document.
+                int stepOffset = step.getTextOffset();
+                int lineStart = editor.getDocument()
+                        .getLineStartOffset(editor.getDocument().getLineNumber(stepOffset));
+                String indent = editor.getDocument().getText(new TextRange(lineStart, stepOffset));
+
                 PresentationFactory factory = getFactory();
-                InlayPresentation hint = factory.roundWithBackground(
+
+                // Primary tag: [🏷 METHOD /path]
+                InlayPresentation apiTag = factory.roundWithBackground(
                         factory.seq(
                                 factory.smallScaledIcon(AllIcons.Nodes.Tag),
                                 factory.smallText(" " + methodAndPath[0] + " " + methodAndPath[1])
                         )
                 );
 
-                sink.addBlockElement(step.getTextOffset(), false, true, 0, hint);
+                // Optional secondary tag: clickable template filename
+                InlayPresentation hint = buildHint(factory, indent, apiTag, endpoint, step.getProject());
+                sink.addBlockElement(stepOffset, false, true, 0, hint);
                 return true;
             }
         };
+    }
+
+    /**
+     * Assembles the full hint presentation. When a body template is found for the endpoint,
+     * a second clickable tag with the filename is appended.
+     */
+    private static InlayPresentation buildHint(@NotNull PresentationFactory factory,
+                                               @NotNull String indent,
+                                               @NotNull InlayPresentation apiTag,
+                                               @NotNull PsiEnumConstant endpoint,
+                                               @NotNull Project project) {
+        // Resolve the proxy class: endpoint lives inside an inner enum of the proxy.
+        PsiClass innerEnum = endpoint.getContainingClass();
+        PsiClass proxyClass = innerEnum != null ? innerEnum.getContainingClass() : null;
+
+        VirtualFile templateFile = proxyClass != null
+                ? ApiEndpointResolver.findTemplateVirtualFile(proxyClass, endpoint, project)
+                : null;
+
+        if (templateFile == null) {
+            return factory.seq(factory.text(indent), apiTag);
+        }
+
+        // Template tag: [📄 filename.json] — clicking opens the file.
+        String filename = templateFile.getName();
+        InlayPresentation fileLabel = factory.roundWithBackground(
+                factory.seq(
+                        factory.smallScaledIcon(AllIcons.FileTypes.Text),
+                        factory.smallText(" " + filename)
+                )
+        );
+        InlayPresentation fileTag = factory.referenceOnHover(
+                fileLabel,
+                (event, point) -> FileEditorManager.getInstance(project).openFile(templateFile, true)
+        );
+
+        return factory.seq(
+                factory.text(indent),
+                apiTag,
+                factory.smallText("   "),
+                fileTag
+        );
     }
 
     /**
@@ -111,13 +172,11 @@ public class ApiInlayHintsProvider implements InlayHintsProvider<NoSettings> {
         PsiExpression[] args = argList.getExpressions();
         if (args.length < 2) return null;
 
-        // First arg: Method.POST or Method.GET etc. — take the reference name.
         String method = null;
         if (args[0] instanceof PsiReferenceExpression ref) {
             method = ref.getReferenceName();
         }
 
-        // Second arg: a string literal "/some/path".
         String path = null;
         if (args[1] instanceof PsiLiteralExpression lit) {
             Object value = lit.getValue();

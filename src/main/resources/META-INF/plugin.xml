@@ -63,7 +63,8 @@
 
         <!-- ── API endpoint navigation (send … to … step) ── -->
         <gotoDeclarationHandler
-                implementation="com.pumpkin.intellij.api.ApiGotoDeclarationHandler"/>
+                implementation="com.pumpkin.intellij.api.ApiGotoDeclarationHandler"
+                order="first"/>
         <psi.referenceContributor
                 language="Gherkin"
                 implementation="com.pumpkin.intellij.api.ApiEndpointReferenceContributor"/>

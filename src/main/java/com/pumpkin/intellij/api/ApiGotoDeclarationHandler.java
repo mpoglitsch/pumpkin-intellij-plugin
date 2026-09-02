@@ -10,11 +10,12 @@ import org.jetbrains.annotations.Nullable;
 import org.jetbrains.plugins.cucumber.psi.GherkinStep;
 
 /**
- * Intercepts "Go to Declaration" on the {@code {apiRequestDefinition}} fragment of generic
- * API send steps and navigates to the matching endpoint enum constant in the proxy class.
+ * Intercepts "Go to Declaration" on any part of a generic API send step and navigates
+ * to the matching endpoint enum constant in the proxy class.
  *
- * <p>Runs alongside {@link com.pumpkin.intellij.navigation.PumpkinGotoDeclarationHandler};
- * returns {@code null} for steps that are not API send steps.
+ * <p>Registered with {@code order="first"} so it runs before Cucumber's handler.
+ * Returns {@code null} for steps that do not match the API send pattern so Cucumber's
+ * handler still works normally for regular steps.
  */
 public class ApiGotoDeclarationHandler implements GotoDeclarationHandler {
 
@@ -33,16 +34,15 @@ public class ApiGotoDeclarationHandler implements GotoDeclarationHandler {
         ApiStepPattern.ParsedApiStep parsed = ApiStepPattern.parse(step);
         if (parsed == null) return null;
 
-        // Only activate when the caret is on the apiRequestDefinition part of the step.
-        int relativeOffset = offset - step.getTextOffset();
-        if (!parsed.getDefinitionRangeInStep().containsOffset(relativeOffset)) return null;
-
+        // Step matches the API pattern — try to navigate to the endpoint enum constant.
+        // Return null (not EMPTY_ARRAY) when unresolved so Cucumber can still navigate
+        // to the step-definition method as a fallback.
         PsiEnumConstant target = ApiEndpointResolver.resolve(
                 sourceElement.getProject(),
                 parsed.getApiNotation(),
                 parsed.getApiRequestDefinition());
 
-        if (target == null || !target.isValid()) return PsiElement.EMPTY_ARRAY;
+        if (target == null || !target.isValid()) return null;
         return new PsiElement[]{target};
     }
 }
