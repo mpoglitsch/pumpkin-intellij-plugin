@@ -1,0 +1,101 @@
+<idea-plugin>
+    <id>com.pumpkin.intellij.pumpkin-plugin</id>
+    <name>Pumpkin Process Support</name>
+    <vendor>Pumpkin</vendor>
+    <description><![CDATA[
+        Adds IDE support for <b>Pumpkin Processes</b> – <code>@pumpkin</code>-tagged Cucumber/Gherkin
+        Scenarios that can be invoked with the <code>* Process: ...</code> step syntax.<br/><br/>
+        Features:
+        <ul>
+            <li>Navigation: Option/Alt-click on a Process invocation jumps to the definition</li>
+            <li>Completion: suggests matching Process names after <code>Process: </code></li>
+            <li>Highlighting: distinguishes the <code>Process:</code> keyword and variable values</li>
+            <li>Inspection: reports missing required parameters with a quick fix</li>
+            <li>Configurable process directories and highlight colors</li>
+        </ul>
+    ]]></description>
+
+    <depends>com.intellij.modules.platform</depends>
+    <!-- Java PSI APIs (PsiClass, PsiEnumConstant, ClassInheritorsSearch, etc.) -->
+    <depends>com.intellij.modules.java</depends>
+    <!--
+      The "Gherkin" plugin (marketplace ID 9164, XML ID "gherkin") provides all
+      Gherkin PSI classes: GherkinFile, GherkinScenario, GherkinStep, GherkinTable, etc.
+      Users must install the "Gherkin" or "Cucumber for Java" plugin alongside this plugin.
+    -->
+    <depends>gherkin</depends>
+
+    <extensions defaultExtensionNs="com.intellij">
+
+        <!-- ── Services ── -->
+        <projectService
+                serviceImplementation="com.pumpkin.intellij.settings.PumpkinSettingsState"/>
+        <projectService
+                serviceImplementation="com.pumpkin.intellij.repository.PumpkinProcessService"/>
+
+        <!-- ── Settings UI ── -->
+        <projectConfigurable
+                parentId="tools"
+                id="com.pumpkin.intellij.settings.PumpkinSettingsConfigurable"
+                displayName="Pumpkin"
+                instance="com.pumpkin.intellij.settings.PumpkinSettingsConfigurable"/>
+
+        <!-- ── Annotator ── -->
+        <annotator
+                language="Gherkin"
+                implementationClass="com.pumpkin.intellij.highlighting.PumpkinProcessAnnotator"/>
+
+        <!-- ── Completion ── -->
+        <completion.contributor
+                language="Gherkin"
+                implementationClass="com.pumpkin.intellij.completion.PumpkinProcessCompletionContributor"
+                order="first"/>
+
+        <!-- ── Go-to-Declaration handler (navigation, runs before Cucumber's handler) ── -->
+        <gotoDeclarationHandler
+                implementation="com.pumpkin.intellij.navigation.PumpkinGotoDeclarationHandler"
+                order="first"/>
+
+        <!-- ── PSI Reference contributor (navigation) ── -->
+        <psi.referenceContributor
+                language="Gherkin"
+                implementation="com.pumpkin.intellij.navigation.PumpkinProcessReferenceContributor"/>
+
+        <!-- ── API endpoint navigation (send … to … step) ── -->
+        <gotoDeclarationHandler
+                implementation="com.pumpkin.intellij.api.ApiGotoDeclarationHandler"/>
+        <psi.referenceContributor
+                language="Gherkin"
+                implementation="com.pumpkin.intellij.api.ApiEndpointReferenceContributor"/>
+
+        <!-- ── API endpoint inlay hints (method + path above matching steps) ── -->
+        <codeInsight.inlayProvider
+                language="Gherkin"
+                implementationClass="com.pumpkin.intellij.api.ApiInlayHintsProvider"/>
+
+        <!-- ── Inspection ── -->
+        <localInspection
+                language="Gherkin"
+                shortName="PumpkinMissingRequiredParameter"
+                displayName="Missing Pumpkin Process required parameter"
+                groupName="Pumpkin"
+                enabledByDefault="true"
+                level="WARNING"
+                implementationClass="com.pumpkin.intellij.inspection.PumpkinProcessInspection"/>
+
+        <!-- ── Gherkin section folding (# Section: … / # End) ── -->
+        <lang.foldingBuilder
+                language="Gherkin"
+                implementationClass="com.pumpkin.intellij.section.GherkinSectionFoldingBuilder"/>
+
+        <!-- ── Color settings page ── -->
+        <colorSettingsPage
+                implementation="com.pumpkin.intellij.highlighting.PumpkinColorSettingsPage"/>
+
+        <!-- ── Default color scheme overrides ── -->
+        <additionalTextAttributes scheme="Default"  file="colorSchemes/PumpkinDefault.xml"/>
+        <additionalTextAttributes scheme="Darcula"  file="colorSchemes/PumpkinDarcula.xml"/>
+        <additionalTextAttributes scheme="High contrast" file="colorSchemes/PumpkinDarcula.xml"/>
+
+    </extensions>
+</idea-plugin>

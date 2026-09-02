@@ -1,0 +1,18 @@
+<html>
+<body>
+Reports a Pumpkin Process invocation that is missing one or more required table parameters
+declared via <code>@processRequired(...)</code> on the target Scenario.
+
+<p>Example of a flagged invocation:</p>
+<pre>
+  @pumpkin
+  @processRequired(service,name)
+  Scenario: Create customer {customerName}
+
+  * Process: Create customer Hans
+    | service | 25736 |   &lt;!-- 'name' is missing --&gt;
+</pre>
+
+<p>A quick fix is available to insert the missing row(s) automatically.</p>
+</body>
+</html>
