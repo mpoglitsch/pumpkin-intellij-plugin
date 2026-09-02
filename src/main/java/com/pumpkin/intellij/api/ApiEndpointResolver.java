@@ -12,7 +12,9 @@ import com.intellij.psi.util.PsiTreeUtil;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
+import java.util.ArrayList;
 import java.util.Collection;
+import java.util.List;
 
 /**
  * Shared resolution logic for generic API send steps.
@@ -85,6 +87,36 @@ public final class ApiEndpointResolver {
         }
 
         return null;
+    }
+
+    /**
+     * Returns every class in the project that directly {@code extends AbstractApiProxy},
+     * for use in "pick a proxy" UI (e.g. the Add API Endpoint dialog).
+     */
+    @NotNull
+    public static List<PsiClass> findAllProxyClasses(@NotNull Project project) {
+        List<PsiClass> result = new ArrayList<>();
+        GlobalSearchScope scope = GlobalSearchScope.allScope(project);
+        PsiClass abstractProxy = JavaPsiFacade.getInstance(project).findClass(ABSTRACT_PROXY_FQN, scope);
+        if (abstractProxy == null) return result;
+
+        Collection<PsiReference> refs = ReferencesSearch.search(abstractProxy, scope).findAll();
+        for (PsiReference ref : refs) {
+            PsiClass proxy = proxyClassFromExtends(ref);
+            if (proxy != null && !result.contains(proxy)) {
+                result.add(proxy);
+            }
+        }
+        return result;
+    }
+
+    /**
+     * Public wrapper around {@link #extractGetApiNotation} for callers outside this class
+     * (e.g. to derive the {@code <api-name>} template folder from a chosen proxy).
+     */
+    @Nullable
+    public static String apiNotationOf(@NotNull PsiClass proxy) {
+        return extractGetApiNotation(proxy);
     }
 
     /**

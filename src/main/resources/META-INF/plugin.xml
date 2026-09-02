@@ -24,6 +24,9 @@
       Users must install the "Gherkin" or "Cucumber for Java" plugin alongside this plugin.
     -->
     <depends>gherkin</depends>
+    <!-- Bundled JSON-language module, used for syntax highlighting in the
+         "Add API Endpoint" body-template editor. Ships with every IC/IU install. -->
+    <depends>com.intellij.modules.json</depends>
 
     <extensions defaultExtensionNs="com.intellij">
 
@@ -92,5 +95,23 @@
         <additionalTextAttributes scheme="Darcula"  file="colorSchemes/PumpkinDarcula.xml"/>
         <additionalTextAttributes scheme="High contrast" file="colorSchemes/PumpkinDarcula.xml"/>
 
+        <!-- ── Pumpkin floating toolbar button (Add API Endpoint, etc.) ── -->
+        <editorFloatingToolbarProvider implementation="com.pumpkin.intellij.actions.PumpkinFloatingToolbarProvider"/>
+
     </extensions>
+
+    <actions>
+        <!-- The root group here is purely structural: ActionToolbarImpl renders a floating
+             toolbar's root group's CHILDREN as buttons, never the root group itself, so the
+             actual visible pumpkin button is the nested popup group below. -->
+        <group id="Pumpkin.FloatingToolbar">
+            <group id="Pumpkin.Menu" icon="com.pumpkin.intellij.icons.PumpkinIcons.PUMPKIN"
+                   text="Pumpkin" popup="true">
+                <action id="Pumpkin.AddApiEndpoint"
+                        class="com.pumpkin.intellij.actions.AddApiEndpointAction"
+                        text="Add API Endpoint..."
+                        description="Generate a new endpoint on an existing API proxy"/>
+            </group>
+        </group>
+    </actions>
 </idea-plugin>
