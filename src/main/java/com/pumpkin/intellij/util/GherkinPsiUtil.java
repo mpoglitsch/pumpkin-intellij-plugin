@@ -8,6 +8,10 @@ import org.jetbrains.plugins.cucumber.psi.GherkinScenario;
 import org.jetbrains.plugins.cucumber.psi.GherkinStep;
 import org.jetbrains.plugins.cucumber.psi.GherkinTag;
 
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+
 /**
  * Stateless helpers for inspecting Gherkin PSI elements.
  * All interaction with Gherkin PSI classes is isolated here so that the rest
@@ -21,8 +25,14 @@ public final class GherkinPsiUtil {
     private static final String WITH_DATA_SUFFIX = " with data";
     private static final String WITHOUT_DATA_SUFFIX = " without data";
     // GherkinTag.getName() returns getText(), which INCLUDES the '@' prefix.
+    // "@Pumpkin" is accepted as a case-variant alias of "@pumpkin" (matched case-insensitively).
     private static final String PUMPKIN_TAG = "@pumpkin";
+    // "@requiredParameters(...)" is accepted as an alias of "@processRequired(...)".
     private static final String PROCESS_REQUIRED_PREFIX = "@processRequired(";
+    private static final String REQUIRED_PARAMETERS_PREFIX = "@requiredParameters(";
+    // "@setsParameters(...)" is accepted as an alias of "@setsContextParameters(...)".
+    private static final String SETS_CONTEXT_PARAMETERS_PREFIX = "@setsContextParameters(";
+    private static final String SETS_PARAMETERS_PREFIX = "@setsParameters(";
 
     private GherkinPsiUtil() {}
 
@@ -69,10 +79,10 @@ public final class GherkinPsiUtil {
     // Scenario helpers
     // -------------------------------------------------------------------------
 
-    /** Returns {@code true} when the scenario has the {@code @pumpkin} tag. */
+    /** Returns {@code true} when the scenario has the {@code @pumpkin} tag (case-insensitive, so {@code @Pumpkin} also matches). */
     public static boolean hasPumpkinTag(@NotNull GherkinScenario scenario) {
         for (GherkinTag tag : scenario.getTags()) {
-            if (PUMPKIN_TAG.equals(tag.getName())) return true;
+            if (PUMPKIN_TAG.equalsIgnoreCase(tag.getName())) return true;
         }
         return false;
     }
@@ -91,25 +101,44 @@ public final class GherkinPsiUtil {
     }
 
     /**
-     * Parses the {@code @processRequired(...)} tag value and returns the list of required
-     * parameter names, or an empty list if the tag is absent or has no parameters.
+     * Parses the {@code @processRequired(...)} tag value (or its {@code @requiredParameters(...)}
+     * alias) and returns the list of required parameter names, or an empty list if neither tag is
+     * present.
      */
-    public static @NotNull java.util.List<String> parseRequiredParameters(@NotNull GherkinScenario scenario) {
+    public static @NotNull List<String> parseRequiredParameters(@NotNull GherkinScenario scenario) {
+        return parseTagArguments(scenario, PROCESS_REQUIRED_PREFIX, REQUIRED_PARAMETERS_PREFIX);
+    }
+
+    /**
+     * Parses the {@code @setsContextParameters(...)} tag value (or its {@code @setsParameters(...)}
+     * alias) and returns the list of context parameter names the Process sets when executed, or an
+     * empty list if neither tag is present.
+     */
+    public static @NotNull List<String> parseSetsContextParameters(@NotNull GherkinScenario scenario) {
+        return parseTagArguments(scenario, SETS_CONTEXT_PARAMETERS_PREFIX, SETS_PARAMETERS_PREFIX);
+    }
+
+    /** Shared parsing for comma-separated {@code @tagName(a, b, c)} tag arguments, trying each alias prefix in turn. */
+    private static @NotNull List<String> parseTagArguments(@NotNull GherkinScenario scenario,
+                                                            @NotNull String... prefixes) {
         for (GherkinTag tag : scenario.getTags()) {
             String name = tag.getName();
-            if (name != null && name.startsWith(PROCESS_REQUIRED_PREFIX) && name.endsWith(")")) {
-                String content = name.substring(PROCESS_REQUIRED_PREFIX.length(), name.length() - 1);
-                java.util.List<String> result = new java.util.ArrayList<>();
-                for (String part : content.split(",")) {
-                    String trimmed = part.trim();
-                    if (!trimmed.isEmpty() && !result.contains(trimmed)) {
-                        result.add(trimmed);
+            if (name == null) continue;
+            for (String prefix : prefixes) {
+                if (name.startsWith(prefix) && name.endsWith(")")) {
+                    String content = name.substring(prefix.length(), name.length() - 1);
+                    List<String> result = new ArrayList<>();
+                    for (String part : content.split(",")) {
+                        String trimmed = part.trim();
+                        if (!trimmed.isEmpty() && !result.contains(trimmed)) {
+                            result.add(trimmed);
+                        }
                     }
+                    return result;
                 }
-                return result;
             }
         }
-        return java.util.Collections.emptyList();
+        return Collections.emptyList();
     }
 
     // -------------------------------------------------------------------------
@@ -119,5 +148,10 @@ public final class GherkinPsiUtil {
     /** Returns the enclosing {@link GherkinStep} for any PSI element, or {@code null}. */
     public static @Nullable GherkinStep findEnclosingStep(@NotNull PsiElement element) {
         return PsiTreeUtil.getParentOfType(element, GherkinStep.class, false);
+    }
+
+    /** Returns the enclosing {@link GherkinScenario} for any PSI element, or {@code null}. */
+    public static @Nullable GherkinScenario findEnclosingScenario(@NotNull PsiElement element) {
+        return PsiTreeUtil.getParentOfType(element, GherkinScenario.class, false);
     }
 }

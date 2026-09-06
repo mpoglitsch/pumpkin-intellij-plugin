@@ -48,21 +48,40 @@
                 language="Gherkin"
                 implementationClass="com.pumpkin.intellij.highlighting.PumpkinProcessAnnotator"/>
 
+        <!-- ── "Sets Context Parameters: ..." inlay hint above Process: steps ── -->
+        <codeInsight.inlayProvider
+                language="Gherkin"
+                implementationClass="com.pumpkin.intellij.highlighting.PumpkinContextParametersInlayHintsProvider"/>
+
         <!-- ── Completion ── -->
         <completion.contributor
                 language="Gherkin"
                 implementationClass="com.pumpkin.intellij.completion.PumpkinProcessCompletionContributor"
                 order="first"/>
+        <completion.contributor
+                language="Gherkin"
+                implementationClass="com.pumpkin.intellij.completion.PumpkinTagCompletionContributor"/>
 
         <!-- ── Go-to-Declaration handler (navigation, runs before Cucumber's handler) ── -->
         <gotoDeclarationHandler
                 implementation="com.pumpkin.intellij.navigation.PumpkinGotoDeclarationHandler"
+                order="first"/>
+        <!-- ── Reverse: Ctrl/Cmd+click a @pumpkin Scenario's header to jump to its usages ── -->
+        <gotoDeclarationHandler
+                implementation="com.pumpkin.intellij.navigation.PumpkinProcessUsagesGotoDeclarationHandler"
                 order="first"/>
 
         <!-- ── PSI Reference contributor (navigation) ── -->
         <psi.referenceContributor
                 language="Gherkin"
                 implementation="com.pumpkin.intellij.navigation.PumpkinProcessReferenceContributor"/>
+
+        <!-- ── Gutter icon on a @pumpkin Scenario's @pumpkin tag: click to see all usages,
+             with a custom popup showing "file:line" for each (see class doc for why this is a
+             gutter icon rather than the Ctrl/Cmd+click popup above) ── -->
+        <codeInsight.lineMarkerProvider
+                language="Gherkin"
+                implementationClass="com.pumpkin.intellij.navigation.PumpkinProcessUsagesLineMarkerProvider"/>
 
         <!-- ── API endpoint inlay hints (method + path above matching steps) ──
              Clicking the API tag navigates to the endpoint enum constant

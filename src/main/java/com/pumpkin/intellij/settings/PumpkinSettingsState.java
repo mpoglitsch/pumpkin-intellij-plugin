@@ -22,7 +22,7 @@ public final class PumpkinSettingsState implements PersistentStateComponent<Pump
 
     /** Paths to the process directories. May be absolute or relative to the project base. */
     public List<String> processDirectories = new ArrayList<>(
-            List.of("src/test/resources/processes")
+            List.of("src/test/resources/features")
     );
 
     /** Whether {@code # Section: …} blocks are collapsed when a feature file is first opened. */

@@ -9,6 +9,7 @@ import com.pumpkin.intellij.settings.PumpkinSettingsState;
 import org.jetbrains.annotations.NotNull;
 
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
 
 /**
@@ -26,9 +27,15 @@ public final class PumpkinProcessRepository {
     /**
      * Recursively collects all {@code .feature} files beneath every configured process directory.
      * Missing or inaccessible directories are silently skipped.
+     *
+     * <p>Deduplicated by {@link VirtualFile} identity: two configured directories that overlap
+     * (one nested inside the other, or both resolving to the same path) would otherwise visit -
+     * and so return - the same physical file more than once, which surfaces downstream as the
+     * exact same Process definition appearing as two indistinguishable candidates wherever
+     * matches are shown (e.g. IntelliJ's "Choose Declaration" popup on an ambiguous jump).
      */
     public @NotNull List<VirtualFile> findProcessFeatureFiles() {
-        List<VirtualFile> result = new ArrayList<>();
+        LinkedHashSet<VirtualFile> result = new LinkedHashSet<>();
         PumpkinSettingsState settings = PumpkinSettingsState.getInstance(project);
 
         for (String dirPath : settings.getProcessDirectories()) {
@@ -46,7 +53,7 @@ public final class PumpkinProcessRepository {
             });
         }
 
-        return result;
+        return new ArrayList<>(result);
     }
 
     /**
