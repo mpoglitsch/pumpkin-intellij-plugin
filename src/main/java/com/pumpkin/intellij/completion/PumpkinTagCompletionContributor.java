@@ -18,11 +18,14 @@ import java.util.List;
  *   <li>{@code @pumpkin} / {@code @Pumpkin} – marks a Scenario as a Process definition.</li>
  *   <li>{@code @processRequired()} / {@code @requiredParameters()} – required parameter names,
  *       caret left between the parentheses.</li>
- *   <li>{@code @setsContextParameters()} / {@code @setsParameters()} – context parameters the
- *       Process sets, caret left between the parentheses.</li>
+ *   <li>{@code @setsParameters()} – context parameters the Process sets, caret left between the
+ *       parentheses.</li>
  * </ul>
- * Old and new tag names are equivalent aliases (see {@link com.pumpkin.intellij.util.GherkinPsiUtil})
- * and are both offered here so either style can be typed.
+ * {@code @processRequired()}/{@code @requiredParameters()} are still both offered as equivalent
+ * aliases (see {@link com.pumpkin.intellij.util.GherkinPsiUtil}). {@code @setsContextParameters()}
+ * is the older name for {@code @setsParameters()} - still parsed for backward compatibility with
+ * existing feature files, but no longer suggested here, since {@code @setsParameters()} is now the
+ * only name new tags should be written with.
  *
  * <p>Does not suppress normal Gherkin tag completion — this just adds extra suggestions.
  */
@@ -32,7 +35,7 @@ public class PumpkinTagCompletionContributor extends CompletionContributor {
 
     private static final List<String> PAREN_SUGGESTIONS = List.of(
             "@processRequired()", "@requiredParameters()",
-            "@setsContextParameters()", "@setsParameters()"
+            "@setsParameters()"
     );
 
     public PumpkinTagCompletionContributor() {

@@ -8,23 +8,24 @@ import java.util.Locale;
 import java.util.stream.Collectors;
 
 /**
- * Case-conversion helpers for turning a free-text endpoint name (or an existing
- * {@code ApiNotation} constant name) into the identifiers the code generator needs:
- * an enum constant name, a camelCase field/filename, and a kebab-case folder name.
+ * Case-conversion helpers for turning a free-text name (an endpoint name, a new proxy's name, or
+ * an existing {@code ApiNotation} constant name) into the identifiers the code generators need:
+ * an enum constant name, a camelCase field/filename, a kebab-case folder name, and a PascalCase
+ * class name.
  */
-final class NameUtils {
+public final class NameUtils {
 
     private NameUtils() {}
 
     /** {@code "Create Order"} → {@code "CREATE_ORDER"} (enum constant name). */
-    static @NotNull String toUpperSnakeCase(@NotNull String input) {
+    public static @NotNull String toUpperSnakeCase(@NotNull String input) {
         return splitWords(input).stream()
                 .map(w -> w.toUpperCase(Locale.ROOT))
                 .collect(Collectors.joining("_"));
     }
 
     /** {@code "Create Order"} → {@code "createOrder"} (template field/filename base). */
-    static @NotNull String toCamelCase(@NotNull String input) {
+    public static @NotNull String toCamelCase(@NotNull String input) {
         List<String> words = splitWords(input);
         StringBuilder sb = new StringBuilder();
         for (int i = 0; i < words.size(); i++) {
@@ -38,8 +39,18 @@ final class NameUtils {
         return sb.toString();
     }
 
+    /** {@code "This Is the API"} → {@code "ThisIsTheApi"} (class name base). */
+    public static @NotNull String toPascalCase(@NotNull String input) {
+        StringBuilder sb = new StringBuilder();
+        for (String w : splitWords(input)) {
+            String lower = w.toLowerCase(Locale.ROOT);
+            sb.append(Character.toUpperCase(lower.charAt(0))).append(lower.substring(1));
+        }
+        return sb.toString();
+    }
+
     /** {@code "BACKEND_API"} → {@code "backend-api"} (template folder name). */
-    static @NotNull String toKebabCase(@NotNull String input) {
+    public static @NotNull String toKebabCase(@NotNull String input) {
         return splitWords(input).stream()
                 .map(w -> w.toLowerCase(Locale.ROOT))
                 .collect(Collectors.joining("-"));

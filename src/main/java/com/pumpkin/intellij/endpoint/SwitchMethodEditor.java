@@ -20,7 +20,7 @@ import org.jetbrains.annotations.Nullable;
  * a {@link com.intellij.psi.SmartPsiElementPointer}) after any method here runs, since inserting
  * text triggers a PSI commit that can invalidate previously held elements in the same file.
  */
-final class SwitchMethodEditor {
+public final class SwitchMethodEditor {
 
     private SwitchMethodEditor() {}
 
@@ -161,7 +161,7 @@ final class SwitchMethodEditor {
     }
 
     /** Returns the leading whitespace of the line containing {@code offset}. */
-    static @NotNull String indentOf(@NotNull String fileText, int offset) {
+    public static @NotNull String indentOf(@NotNull String fileText, int offset) {
         int lineStart = fileText.lastIndexOf('\n', Math.max(offset - 1, 0)) + 1;
         int contentStart = lineStart;
         while (contentStart < fileText.length()

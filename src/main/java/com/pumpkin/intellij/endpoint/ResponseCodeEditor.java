@@ -22,9 +22,11 @@ final class ResponseCodeEditor {
                          @NotNull String enumSimpleName, @NotNull String constantName,
                          @NotNull HttpStatusOption status) {
         PsiClass proxyClass = SwitchMethodEditor.requireValid(proxyPtr);
-        boolean isNewMethod = SwitchMethodEditor.findMethod(proxyClass, METHOD_NAME) == null;
 
-        if (isNewMethod && proxyClass.getContainingFile() instanceof PsiJavaFile javaFile) {
+        // Always ensured, not just when the method is new: ensureImport() already no-ops if the
+        // import exists, and gating it on "is this the first case in the method" incorrectly
+        // assumed the import must have been added whenever the method already existed.
+        if (proxyClass.getContainingFile() instanceof PsiJavaFile javaFile) {
             SwitchMethodEditor.ensureImport(project, javaFile, HTTP_STATUS_FQN);
             proxyClass = SwitchMethodEditor.requireValid(proxyPtr);
         }

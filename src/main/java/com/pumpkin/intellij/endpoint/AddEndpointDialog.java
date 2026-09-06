@@ -9,6 +9,7 @@ import com.intellij.openapi.ui.DialogWrapper;
 import com.intellij.openapi.ui.ValidationInfo;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.psi.PsiClass;
+import com.intellij.ui.ComboboxSpeedSearch;
 import com.intellij.ui.EditorTextField;
 import com.intellij.ui.LanguageTextField;
 import com.intellij.ui.SimpleListCellRenderer;
@@ -56,10 +57,10 @@ public class AddEndpointDialog extends DialogWrapper {
         super(project, true);
         this.proxies = ApiEndpointResolver.findAllProxyClasses(project);
         this.proxyCombo = new JComboBox<>(proxies.toArray(new PsiClass[0]));
-        proxyCombo.setRenderer(SimpleListCellRenderer.create("(none)", proxy -> {
-            String notation = ApiEndpointResolver.apiNotationOf(proxy);
-            return notation != null ? proxy.getName() + " (" + notation + ")" : proxy.getName();
-        }));
+        proxyCombo.setRenderer(SimpleListCellRenderer.create("(none)", AddEndpointDialog::proxyDisplayText));
+        // Lets the user type to filter/jump within the dropdown instead of only scrolling -
+        // matches the text the renderer already shows, not PsiClass's own toString().
+        ComboboxSpeedSearch.installSpeedSearch(proxyCombo, AddEndpointDialog::proxyDisplayText);
 
         this.bodyField = new LanguageTextField(JsonLanguage.INSTANCE, project, "", false);
         bodyField.setOneLineMode(false);
@@ -110,7 +111,25 @@ public class AddEndpointDialog extends DialogWrapper {
         table.setPreferredScrollableViewportSize(new Dimension(480, 90));
         return ToolbarDecorator.createDecorator(table)
                 .setAddAction(button -> ((DefaultTableModel) table.getModel()).addRow(newRow.get()))
+                .setRemoveAction(button -> removeSelectedRows(table))
                 .createPanel();
+    }
+
+    /** Removes every selected row, highest index first so earlier indices stay valid mid-removal. */
+    private static void removeSelectedRows(@NotNull JBTable table) {
+        if (table.isEditing()) {
+            table.getCellEditor().stopCellEditing();
+        }
+        int[] rows = table.getSelectedRows();
+        DefaultTableModel model = (DefaultTableModel) table.getModel();
+        for (int i = rows.length - 1; i >= 0; i--) {
+            model.removeRow(rows[i]);
+        }
+    }
+
+    private static @NotNull String proxyDisplayText(@NotNull PsiClass proxy) {
+        String notation = ApiEndpointResolver.apiNotationOf(proxy);
+        return notation != null ? proxy.getName() + " (" + notation + ")" : proxy.getName();
     }
 
     @Override

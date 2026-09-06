@@ -38,9 +38,9 @@ import java.util.List;
  */
 public final class ApiEndpointResolver {
 
-    static final String ABSTRACT_PROXY_FQN =
+    public static final String ABSTRACT_PROXY_FQN =
             "at.compax.rp.test.services.api.proxy.AbstractApiProxy";
-    static final String API_NOTATION_FQN =
+    public static final String API_NOTATION_FQN =
             "at.compax.rp.test.model.api.ApiNotation";
 
     private ApiEndpointResolver() {}

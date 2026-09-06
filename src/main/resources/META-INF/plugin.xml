@@ -145,10 +145,16 @@
         <group id="Pumpkin.FloatingToolbar">
             <group id="Pumpkin.Menu" icon="com.pumpkin.intellij.icons.PumpkinIcons.PUMPKIN"
                    text="Pumpkin" popup="true">
-                <action id="Pumpkin.AddApiEndpoint"
-                        class="com.pumpkin.intellij.actions.AddApiEndpointAction"
-                        text="Add API Endpoint..."
-                        description="Generate a new endpoint on an existing API proxy"/>
+                <group id="Pumpkin.APIs" text="APIs" popup="true">
+                    <action id="Pumpkin.AddApiEndpoint"
+                            class="com.pumpkin.intellij.actions.AddApiEndpointAction"
+                            text="Add API Endpoint..."
+                            description="Generate a new endpoint on an existing API proxy"/>
+                    <action id="Pumpkin.AddApiProxy"
+                            class="com.pumpkin.intellij.proxy.AddApiProxyAction"
+                            text="Add API Proxy..."
+                            description="Generate a new API proxy class, ApiNotation constant, and (if needed) authentication provider"/>
+                </group>
                 <group id="Pumpkin.Generator" text="Generator" popup="true">
                     <action id="Pumpkin.GenerateWorkflowAssertion"
                             class="com.pumpkin.intellij.workflow.GenerateWorkflowAssertionAction"
