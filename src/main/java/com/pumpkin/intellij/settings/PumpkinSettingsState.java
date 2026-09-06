@@ -28,6 +28,14 @@ public final class PumpkinSettingsState implements PersistentStateComponent<Pump
     /** Whether {@code # Section: …} blocks are collapsed when a feature file is first opened. */
     public boolean collapseSectionsByDefault = true;
 
+    /**
+     * Unique ID (see {@code LocalDataSource.getUniqueId()}) of the datasource last chosen in the
+     * "Generate Workflow Assertion" popover, re-resolved by ID each time it's opened rather than
+     * cached as a live reference. Null/blank until first chosen. Only meaningful when the
+     * Database Tools plugin is installed - see {@code com.pumpkin.intellij.workflow}.
+     */
+    public String workflowAssertionDataSourceId;
+
     public static @NotNull PumpkinSettingsState getInstance(@NotNull Project project) {
         return project.getService(PumpkinSettingsState.class);
     }

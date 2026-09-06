@@ -13,6 +13,27 @@ repositories {
 dependencies {
     compileOnly("org.projectlombok:lombok:1.18.32")
     annotationProcessor("org.projectlombok:lombok:1.18.32")
+
+    // Gradle IntelliJ Plugin 1.x only puts com.intellij.database's top-level jars on the
+    // compileOnly classpath (database-plugin.jar, database-plugin-frontend.jar) - it predates
+    // this platform's heavily-modularized plugin layout, so the "modules/" split jars where the
+    // actual API classes live (LocalDataSource, DatabaseConnectionManager, etc.) are missing.
+    // `intellij.ideaDependency` is only populated by the intellij plugin's own task action (not
+    // during configuration), so it can't be referenced here at all - a lazy Provider still gets
+    // evaluated too early for Gradle's task-dependency analysis. Instead, glob directly into
+    // Gradle's own dependency cache for the already-resolved ideaIU SDK: the hash directory
+    // segment varies, hence the wildcard, but the platform version is this project's own
+    // `platformVersion` property, not machine-specific.
+    compileOnly(fileTree(
+        "${gradle.gradleUserHomeDir}/caches/modules-2/files-2.1/com.jetbrains.intellij.idea/ideaIU/${providers.gradleProperty("platformVersion").get()}"
+    ) {
+        include(
+            "*/ideaIU-${providers.gradleProperty("platformVersion").get()}/plugins/DatabaseTools/lib/modules/intellij.database.core.impl.jar",
+            "*/ideaIU-${providers.gradleProperty("platformVersion").get()}/plugins/DatabaseTools/lib/modules/intellij.database.connectivity.jar",
+            "*/ideaIU-${providers.gradleProperty("platformVersion").get()}/plugins/DatabaseTools/lib/modules/intellij.database.impl.jar",
+            "*/ideaIU-${providers.gradleProperty("platformVersion").get()}/plugins/DatabaseTools/lib/modules/intellij.database.jdbcConsole.jar"
+        )
+    })
 }
 
 java {

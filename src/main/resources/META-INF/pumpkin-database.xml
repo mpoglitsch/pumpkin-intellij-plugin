@@ -1,0 +1,11 @@
+<idea-plugin>
+    <!--
+      Only loaded by the platform when "com.intellij.database" (Database Tools and SQL) is
+      installed and enabled - see plugin.xml's optional <depends> and WorkflowDataSourceBridge's
+      doc. Registering the implementation here, rather than in the main plugin.xml, is what keeps
+      com.intellij.database.* classes out of the always-loaded code path.
+    -->
+    <extensions defaultExtensionNs="com.pumpkin.intellij.pumpkin-plugin">
+        <workflowDataSourceBridge implementation="com.pumpkin.intellij.workflow.db.WorkflowDataSourceBridgeImpl"/>
+    </extensions>
+</idea-plugin>

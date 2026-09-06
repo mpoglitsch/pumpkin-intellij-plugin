@@ -27,6 +27,20 @@
     <!-- Bundled JSON-language module, used for syntax highlighting in the
          "Add API Endpoint" body-template editor. Ships with every IC/IU install. -->
     <depends>com.intellij.modules.json</depends>
+    <!--
+      "Database Tools and SQL" - bundled with IntelliJ Ultimate and DataGrip, NOT Community.
+      Optional: everything that touches its API lives in pumpkin-database.xml, which the platform
+      only loads when this plugin is actually present - see WorkflowDataSourceBridge's doc for why
+      (referencing com.intellij.database.* classes from always-loaded code would break Community).
+    -->
+    <depends optional="true" config-file="pumpkin-database.xml">com.intellij.database</depends>
+
+    <extensionPoints>
+        <!-- Seam for the optional Database-plugin integration - see WorkflowDataSourceBridge. -->
+        <extensionPoint name="workflowDataSourceBridge"
+                         interface="com.pumpkin.intellij.workflow.WorkflowDataSourceBridge"
+                         dynamic="true"/>
+    </extensionPoints>
 
     <extensions defaultExtensionNs="com.intellij">
 
@@ -61,6 +75,11 @@
         <completion.contributor
                 language="Gherkin"
                 implementationClass="com.pumpkin.intellij.completion.PumpkinTagCompletionContributor"/>
+        <!-- ── "wf:123" shortcut: pressing Enter after typing this generates the workflow's
+             default-scenario assertion steps directly into the document, similar in spirit to
+             Java's "psvm" live template - see WorkflowShortcutEnterHandler's class doc ── -->
+        <enterHandlerDelegate implementation="com.pumpkin.intellij.workflow.WorkflowShortcutEnterHandler"/>
+        <typedHandler implementationClass="com.pumpkin.intellij.workflow.WorkflowShortcutTypedHandler"/>
 
         <!-- ── Go-to-Declaration handler (navigation, runs before Cucumber's handler) ── -->
         <gotoDeclarationHandler
@@ -130,6 +149,12 @@
                         class="com.pumpkin.intellij.actions.AddApiEndpointAction"
                         text="Add API Endpoint..."
                         description="Generate a new endpoint on an existing API proxy"/>
+                <group id="Pumpkin.Generator" text="Generator" popup="true">
+                    <action id="Pumpkin.GenerateWorkflowAssertion"
+                            class="com.pumpkin.intellij.workflow.GenerateWorkflowAssertionAction"
+                            text="Workflow Assertion..."
+                            description="Generate workflow-assertion Gherkin steps from a Workflow ID"/>
+                </group>
             </group>
         </group>
     </actions>
