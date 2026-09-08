@@ -1,7 +1,9 @@
 package com.pumpkin.intellij.navigation;
 
 import com.intellij.codeInsight.navigation.actions.GotoDeclarationHandler;
+import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.editor.Editor;
+import com.intellij.openapi.progress.ProcessCanceledException;
 import com.intellij.psi.PsiElement;
 import com.pumpkin.intellij.model.PumpkinProcessDefinition;
 import com.pumpkin.intellij.repository.PumpkinProcessService;
@@ -22,12 +24,31 @@ import java.util.List;
  */
 public class PumpkinGotoDeclarationHandler implements GotoDeclarationHandler {
 
+    private static final Logger LOG = Logger.getInstance(PumpkinGotoDeclarationHandler.class);
+
+    /**
+     * Catches broadly (except {@link ProcessCanceledException}, which must always propagate -
+     * see {@code PumpkinProcessAnnotator}'s own doc comment for why this pattern exists at all):
+     * a {@link GotoDeclarationHandler} that lets an exception escape can get disabled by the
+     * platform for the rest of the session, exactly like an {@code Annotator} would - "restart
+     * fixes it" for navigation is that same failure mode, not just a highlighting-only risk.
+     */
     @Override
     public PsiElement @Nullable [] getGotoDeclarationTargets(
             @Nullable PsiElement sourceElement,
             int offset,
             Editor editor) {
+        try {
+            return doGetGotoDeclarationTargets(sourceElement);
+        } catch (ProcessCanceledException e) {
+            throw e;
+        } catch (Throwable t) {
+            LOG.warn("Pumpkin Process navigation failed for " + sourceElement, t);
+            return null;
+        }
+    }
 
+    private PsiElement @Nullable [] doGetGotoDeclarationTargets(@Nullable PsiElement sourceElement) {
         if (sourceElement == null) return null;
 
         GherkinStep step = GherkinPsiUtil.findEnclosingStep(sourceElement);
@@ -36,9 +57,8 @@ public class PumpkinGotoDeclarationHandler implements GotoDeclarationHandler {
         String invocationText = GherkinPsiUtil.getProcessInvocationText(step);
         if (invocationText == null) return null;
 
-        List<PumpkinProcessDefinition> matches =
-                PumpkinProcessService.getInstance(sourceElement.getProject())
-                        .findMatchingProcesses(invocationText);
+        PumpkinProcessService service = PumpkinProcessService.getInstance(sourceElement.getProject());
+        List<PumpkinProcessDefinition> matches = service.findMatchingProcesses(invocationText);
 
         return matches.stream()
                 .map(PumpkinProcessDefinition::getScenarioPsiElement)

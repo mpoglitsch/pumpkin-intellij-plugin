@@ -38,6 +38,21 @@ public class PumpkinFloatingToolbarProvider extends AbstractFloatingToolbarProvi
         return 5000;
     }
 
+    /**
+     * Explicitly implemented rather than left to {@code AbstractFloatingToolbarProvider}'s own
+     * default: on at least one real IntelliJ build (reported on Windows against a build within
+     * the plugin's declared {@code pluginSinceBuild}-{@code pluginUntilBuild} range), that base
+     * class does not supply an implementation of this method at all, and the platform fails to
+     * even instantiate the extension point with {@code PluginException: ... does not define or
+     * inherit an implementation of ... getAutoHideable()}. Implementing it here removes any
+     * dependency on what a given platform build's base class happens to provide. Must be {@code
+     * true} - see the class doc above for why {@code false} would hide the button entirely.
+     */
+    @Override
+    public boolean getAutoHideable() {
+        return true;
+    }
+
     @Override
     public void register(@NotNull DataContext dataContext, @NotNull FloatingToolbarComponent component,
                          @NotNull Disposable parentDisposable) {

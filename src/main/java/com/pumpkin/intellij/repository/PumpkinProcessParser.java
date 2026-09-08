@@ -2,6 +2,7 @@ package com.pumpkin.intellij.repository;
 
 import com.intellij.openapi.editor.Document;
 import com.intellij.openapi.fileEditor.FileDocumentManager;
+import com.intellij.openapi.progress.ProcessCanceledException;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.psi.SmartPointerManager;
 import com.pumpkin.intellij.model.PumpkinProcessDefinition;
@@ -90,6 +91,8 @@ public final class PumpkinProcessParser {
             if (doc != null) {
                 return doc.getLineNumber(textOffset) + 1;
             }
+        } catch (ProcessCanceledException e) {
+            throw e; // must always propagate - see PumpkinProcessService.loadProcesses's doc comment
         } catch (Exception ignored) {}
         return 0;
     }

@@ -77,7 +77,8 @@ public final class EndpointCodeGenerator {
         return null;
     }
 
-    static @NotNull List<String> extractPathVariables(@NotNull String path) {
+    /** Also used by {@code com.pumpkin.intellij.api.ApiEndpointParameters} to read path variables back. */
+    public static @NotNull List<String> extractPathVariables(@NotNull String path) {
         List<String> variables = new ArrayList<>();
         Matcher m = PATH_VARIABLE.matcher(path);
         while (m.find()) {

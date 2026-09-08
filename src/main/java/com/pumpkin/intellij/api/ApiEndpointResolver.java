@@ -139,14 +139,30 @@ public final class ApiEndpointResolver {
      * {@code getApi()}, supporting two forms:
      *
      * <ul>
-     *   <li><b>Explicit method</b>: {@code public ApiNotation getApi() { return ApiNotation.X; }}</li>
      *   <li><b>Lombok {@code @Getter}</b>: {@code @Getter private final ApiNotation api = ApiNotation.X;}
      *       — Lombok generates {@code getApi()} from a field named {@code api}.</li>
+     *   <li><b>Explicit method</b>: {@code public ApiNotation getApi() { return ApiNotation.X; }}</li>
      * </ul>
+     *
+     * <p>The field form is checked first, deliberately: if the IntelliJ Lombok plugin is active,
+     * it contributes a <em>synthetic</em> {@code getApi()} method for the {@code @Getter}-annotated
+     * field, with a body shaped like {@code return this.api;} - checking methods first would match
+     * that synthetic method and extract {@code ref.getReferenceName()} from {@code this.api}, which
+     * resolves to {@code "api"} (the field's own name), not the enum constant the field is
+     * initialized to. Reading the field's own initializer directly sidesteps that ambiguity
+     * entirely, regardless of what synthetic methods Lombok's plugin happens to contribute.
      */
     @Nullable
     private static String extractGetApiNotation(@NotNull PsiClass proxy) {
-        // Form 1: explicit getApi() method
+        // Form 1: Lombok @Getter on a field named "api"
+        for (PsiField field : proxy.getFields()) {
+            if (!"api".equals(field.getName())) continue;
+            PsiExpression initializer = field.getInitializer();
+            if (!(initializer instanceof PsiReferenceExpression ref)) continue;
+            return ref.getReferenceName();
+        }
+
+        // Form 2 (fallback): explicit getApi() method with no backing "api" field
         for (PsiMethod method : proxy.getMethods()) {
             if (!"getApi".equals(method.getName())
                     || method.getParameterList().getParametersCount() != 0) {
@@ -160,14 +176,6 @@ public final class ApiEndpointResolver {
                 if (!(expr instanceof PsiReferenceExpression ref)) continue;
                 return ref.getReferenceName();
             }
-        }
-
-        // Form 2: Lombok @Getter on a field named "api" — generates getApi()
-        for (PsiField field : proxy.getFields()) {
-            if (!"api".equals(field.getName())) continue;
-            PsiExpression initializer = field.getInitializer();
-            if (!(initializer instanceof PsiReferenceExpression ref)) continue;
-            return ref.getReferenceName();
         }
 
         return null;

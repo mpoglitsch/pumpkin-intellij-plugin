@@ -1,4 +1,4 @@
-# Pumpkin Process Support — IntelliJ IDEA Plugin
+# Pumpkin Support — IntelliJ IDEA Plugin
 
 Adds first-class IDE support for **Pumpkin Processes**: `@pumpkin`-tagged Cucumber/Gherkin Scenarios invokable via the `* Process: ...` step syntax.
 

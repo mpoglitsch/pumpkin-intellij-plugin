@@ -2,6 +2,7 @@ package com.pumpkin.intellij.repository;
 
 import com.intellij.openapi.Disposable;
 import com.intellij.openapi.components.Service;
+import com.intellij.openapi.progress.ProcessCanceledException;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.openapi.vfs.VirtualFileManager;
@@ -19,6 +20,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
 
 /**
@@ -37,6 +39,22 @@ public final class PumpkinProcessService implements Disposable {
     /** Volatile so reads see the latest write without synchronisation overhead. */
     private volatile List<PumpkinProcessDefinition> cache;
 
+    /**
+     * Guards against a real race between {@link #getProcesses} and {@link #invalidate}: {@code
+     * loadProcesses()} can take long enough (scanning every process file) that an edit - and the
+     * VFS-change {@code invalidate()} it triggers - can land while a load is still in flight.
+     * Without this counter, that in-flight load (built from data read *before* the edit) would
+     * finish afterwards and unconditionally overwrite {@code cache} with that now-stale snapshot;
+     * since it's one shared, project-wide cache, every Process lookup would then silently use
+     * stale data until *another* unrelated edit happened to invalidate it again - matching
+     * exactly the reported symptom of Process navigation going dead project-wide after a save,
+     * fixed only by restarting. Incremented on every {@link #invalidate}; a load only gets cached
+     * if the counter hasn't moved since that load started - otherwise it's simply discarded (the
+     * result is still returned for this one call - it just isn't cached), leaving {@code cache
+     * == null} so the next call reloads fresh instead of latching onto stale data forever.
+     */
+    private final AtomicLong invalidationCount = new AtomicLong();
+
     public PumpkinProcessService(@NotNull Project project) {
         this.project = project;
         this.repository = new PumpkinProcessRepository(project);
@@ -50,8 +68,7 @@ public final class PumpkinProcessService implements Disposable {
                     public void after(@NotNull List<? extends VFileEvent> events) {
                         for (VFileEvent e : events) {
                             VirtualFile f = e.getFile();
-                            if (f != null
-                                    && "feature".equalsIgnoreCase(f.getExtension())
+                            if (f != null && "feature".equalsIgnoreCase(f.getExtension())
                                     && repository.isInsideProcessDirectory(f)) {
                                 invalidate();
                                 return;
@@ -74,9 +91,16 @@ public final class PumpkinProcessService implements Disposable {
     public @NotNull List<PumpkinProcessDefinition> getProcesses() {
         List<PumpkinProcessDefinition> cached = cache;
         if (cached != null) return cached;
-        cached = ReadAction.compute(() -> loadProcesses());
-        cache = cached;
-        return cached;
+
+        long countBeforeLoad = invalidationCount.get();
+        List<PumpkinProcessDefinition> loaded = ReadAction.compute(() -> loadProcesses());
+
+        // Only cache this result if nothing invalidated us while we were loading - see
+        // invalidationCount's doc comment for why caching it unconditionally is the actual bug.
+        if (invalidationCount.get() == countBeforeLoad) {
+            cache = loaded;
+        }
+        return loaded;
     }
 
     /**
@@ -97,6 +121,7 @@ public final class PumpkinProcessService implements Disposable {
 
     /** Drops the cached definitions so they are reloaded on the next access. */
     public void invalidate() {
+        invalidationCount.incrementAndGet();
         cache = null;
     }
 
@@ -120,8 +145,22 @@ public final class PumpkinProcessService implements Disposable {
                 if (psiFile instanceof GherkinFile) {
                     result.addAll(parser.parse((GherkinFile) psiFile));
                 }
+            } catch (ProcessCanceledException e) {
+                // Must always propagate, never be caught-and-continued: this fires whenever a
+                // pending write action cancels our read action mid-scan (normal, expected - e.g.
+                // exactly the save that triggered this reload in the first place racing against
+                // it). Swallowing it here previously let the loop silently continue through every
+                // remaining file, each of which immediately fails the same way once the read
+                // action is cancelled - so a scan interrupted partway would return a truncated,
+                // near-empty result for the *rest* of the file list, which then got legitimately
+                // cached by the race guard above (nothing invalidated us again during that bad
+                // scan) - poisoning the cache with incomplete data until restart. Letting this
+                // propagate instead unwinds out of getProcesses() entirely (so nothing gets
+                // cached) and into the platform's own read-action retry loop, which transparently
+                // retries the whole operation once the write action is done.
+                throw e;
             } catch (Exception ignored) {
-                // Malformed or inaccessible file – skip gracefully.
+                // Malformed or inaccessible file - skip gracefully.
             }
         }
 

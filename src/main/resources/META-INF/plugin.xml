@@ -1,6 +1,6 @@
 <idea-plugin>
     <id>com.pumpkin.intellij.pumpkin-plugin</id>
-    <name>Pumpkin Process Support</name>
+    <name>Pumpkin Support</name>
     <vendor>Pumpkin</vendor>
     <description><![CDATA[
         Adds IDE support for <b>Pumpkin Processes</b> – <code>@pumpkin</code>-tagged Cucumber/Gherkin
@@ -81,6 +81,12 @@
         <enterHandlerDelegate implementation="com.pumpkin.intellij.workflow.WorkflowShortcutEnterHandler"/>
         <typedHandler implementationClass="com.pumpkin.intellij.workflow.WorkflowShortcutTypedHandler"/>
 
+        <!-- ── "api:" shortcut: typing this opens a filterable popup of every ApiNotation, then
+             (after picking one) a second filterable popup of that proxy's endpoints - selecting
+             one generates the full "I send a/an ... to API ..." step, with a parameter table if
+             needed. See ApiStepTriggerHandler's class doc. ── -->
+        <typedHandler implementationClass="com.pumpkin.intellij.api.ApiStepTriggerHandler"/>
+
         <!-- ── Go-to-Declaration handler (navigation, runs before Cucumber's handler) ── -->
         <gotoDeclarationHandler
                 implementation="com.pumpkin.intellij.navigation.PumpkinGotoDeclarationHandler"
@@ -118,6 +124,15 @@
                 enabledByDefault="true"
                 level="WARNING"
                 implementationClass="com.pumpkin.intellij.inspection.PumpkinProcessInspection"/>
+
+        <localInspection
+                language="Gherkin"
+                shortName="PumpkinProcessRecursion"
+                displayName="Pumpkin Process recursion"
+                groupName="Pumpkin"
+                enabledByDefault="true"
+                level="ERROR"
+                implementationClass="com.pumpkin.intellij.inspection.PumpkinProcessRecursionInspection"/>
 
         <!-- ── Gherkin section folding (# Section: … / # End) ── -->
         <lang.foldingBuilder

@@ -53,4 +53,18 @@ public class WorkflowShortcutEnterHandler implements EnterHandlerDelegate {
 
         return Result.Stop;
     }
+
+    /**
+     * Explicitly implemented rather than left to {@code EnterHandlerDelegate}'s own default: on
+     * at least one real IntelliJ build (reported on Windows, the same class of issue as {@code
+     * PumpkinFloatingToolbarProvider.getAutoHideable()}), that interface doesn't supply a default
+     * implementation of this method at all, and the platform fails to even construct this
+     * extension with {@code AbstractMethodError: ... does not define or inherit an implementation
+     * of ... postProcessEnter(...)}. This handler has no post-processing to do - the whole
+     * generation happens in {@link #preprocessEnter} - so this is a plain no-op.
+     */
+    @Override
+    public Result postProcessEnter(@NotNull PsiFile file, @NotNull Editor editor, @NotNull DataContext dataContext) {
+        return Result.Continue;
+    }
 }
