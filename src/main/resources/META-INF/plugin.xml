@@ -88,6 +88,11 @@
         <enterHandlerDelegate implementation="com.pumpkin.intellij.workflow.WorkflowShortcutEnterHandler"/>
         <typedHandler implementationClass="com.pumpkin.intellij.workflow.WorkflowShortcutTypedHandler"/>
 
+        <!-- ── Pressing Enter after "I store these values in context"/"I store this value into
+             context" inserts a fieldName/value data table below it, cursor in the blank row's
+             first column - see StoreContextValuesEnterHandler's class doc ── -->
+        <enterHandlerDelegate implementation="com.pumpkin.intellij.context.StoreContextValuesEnterHandler"/>
+
         <!-- ── "api:" shortcut: typing this opens a filterable popup of every ApiNotation, then
              (after picking one) a second filterable popup of that proxy's endpoints - selecting
              one generates the full "I send a/an ... to API ..." step, with a parameter table if
