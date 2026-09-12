@@ -35,9 +35,26 @@ final class ApiStepPopups {
 
     private ApiStepPopups() {}
 
-    private record ApiChoice(@NotNull PsiClass proxy, @NotNull String notation) {}
+    /**
+     * {@code toString()} is overridden on both records below (rather than left to the default
+     * record-generated one, which would include {@code proxy}/{@code constant}) because Swing's
+     * {@code JList} "type ahead to select" ({@code BasicListUI.Handler.keyTyped} ->
+     * {@code JList.getNextMatch}) calls {@code toString()} on list model items directly from the
+     * raw AWT key event, with no read action - and {@code PsiClass}/{@code PsiEnumConstant}'s own
+     * {@code toString()} calls {@code getName()}, which requires one. That mismatch throws
+     * {@code Read access is allowed from inside read-action only} on every keystroke typed into
+     * these popups. This is independent of {@code setNamerForFiltering} below (IntelliJ's own
+     * speed-search layer), which never had this problem since it's given an explicit accessor.
+     */
+    private record ApiChoice(@NotNull PsiClass proxy, @NotNull String notation) {
+        @Override
+        public String toString() { return notation; }
+    }
 
-    private record EndpointChoice(@NotNull PsiEnumConstant constant, @NotNull String displayText) {}
+    private record EndpointChoice(@NotNull PsiEnumConstant constant, @NotNull String displayText) {
+        @Override
+        public String toString() { return displayText; }
+    }
 
     static void openApiPopup(@NotNull Editor editor, int lineStart, int caretOffset, @Nullable String keyword) {
         Project project = editor.getProject();

@@ -62,6 +62,13 @@
                 language="Gherkin"
                 implementationClass="com.pumpkin.intellij.highlighting.PumpkinProcessAnnotator"/>
 
+        <!-- ── Warns on a generated "auth:" step whose API's proxy overrides
+             getApiAuthenticationProvider() itself, bypassing step-selected providers entirely -
+             see AuthStepAnnotator's class doc ── -->
+        <annotator
+                language="Gherkin"
+                implementationClass="com.pumpkin.intellij.api.AuthStepAnnotator"/>
+
         <!-- ── "Sets Context Parameters: ..." inlay hint above Process: steps ── -->
         <codeInsight.inlayProvider
                 language="Gherkin"
@@ -86,6 +93,12 @@
              one generates the full "I send a/an ... to API ..." step, with a parameter table if
              needed. See ApiStepTriggerHandler's class doc. ── -->
         <typedHandler implementationClass="com.pumpkin.intellij.api.ApiStepTriggerHandler"/>
+
+        <!-- ── "auth:" shortcut: typing this opens a filterable popup of every ApiNotation, then
+             (after picking one) a second filterable popup of every known authentication provider -
+             selecting one generates the "I use authentication <name> for <API> in this scenario"
+             step. See AuthStepTriggerHandler's class doc. ── -->
+        <typedHandler implementationClass="com.pumpkin.intellij.api.AuthStepTriggerHandler"/>
 
         <!-- ── Go-to-Declaration handler (navigation, runs before Cucumber's handler) ── -->
         <gotoDeclarationHandler

@@ -60,7 +60,7 @@ public final class ApiEndpointResolver {
         if (abstractProxy != null) {
             Collection<PsiReference> refs = ReferencesSearch.search(abstractProxy, scope).findAll();
             for (PsiReference ref : refs) {
-                PsiClass proxy = proxyClassFromExtends(ref);
+                PsiClass proxy = classFromExtends(ref);
                 if (proxy == null) continue;
                 String returnedNotation = extractGetApiNotation(proxy);
                 if (!apiNotation.equalsIgnoreCase(returnedNotation)) continue;
@@ -95,16 +95,29 @@ public final class ApiEndpointResolver {
      */
     @NotNull
     public static List<PsiClass> findAllProxyClasses(@NotNull Project project) {
+        return findDirectSubclasses(project, ABSTRACT_PROXY_FQN);
+    }
+
+    /**
+     * Returns every class in the project that directly {@code extends} the class named
+     * {@code baseFqn}, found via {@link ReferencesSearch} on that class filtered to references
+     * appearing in an {@code extends}-role {@link PsiReferenceList} (see
+     * {@link #classFromExtends}). Generalized out of what was originally just
+     * {@link #findAllProxyClasses} so {@code AuthProviderResolver} can reuse the same algorithm
+     * for the three auth-provider base classes instead of duplicating it.
+     */
+    @NotNull
+    public static List<PsiClass> findDirectSubclasses(@NotNull Project project, @NotNull String baseFqn) {
         List<PsiClass> result = new ArrayList<>();
         GlobalSearchScope scope = GlobalSearchScope.allScope(project);
-        PsiClass abstractProxy = JavaPsiFacade.getInstance(project).findClass(ABSTRACT_PROXY_FQN, scope);
-        if (abstractProxy == null) return result;
+        PsiClass base = JavaPsiFacade.getInstance(project).findClass(baseFqn, scope);
+        if (base == null) return result;
 
-        Collection<PsiReference> refs = ReferencesSearch.search(abstractProxy, scope).findAll();
+        Collection<PsiReference> refs = ReferencesSearch.search(base, scope).findAll();
         for (PsiReference ref : refs) {
-            PsiClass proxy = proxyClassFromExtends(ref);
-            if (proxy != null && !result.contains(proxy)) {
-                result.add(proxy);
+            PsiClass subclass = classFromExtends(ref);
+            if (subclass != null && !result.contains(subclass)) {
+                result.add(subclass);
             }
         }
         return result;
@@ -120,12 +133,11 @@ public final class ApiEndpointResolver {
     }
 
     /**
-     * Given a reference to {@code AbstractApiProxy} (or a type that uses it), returns the
-     * {@link PsiClass} that directly extends it — i.e. the reference appears in an
-     * {@code extends} clause — or {@code null} otherwise.
+     * Given a reference to some base class, returns the {@link PsiClass} that directly extends
+     * it — i.e. the reference appears in an {@code extends} clause — or {@code null} otherwise.
      */
     @Nullable
-    private static PsiClass proxyClassFromExtends(@NotNull PsiReference ref) {
+    private static PsiClass classFromExtends(@NotNull PsiReference ref) {
         PsiElement elem = ref.getElement();
         PsiReferenceList refList = PsiTreeUtil.getParentOfType(elem, PsiReferenceList.class);
         if (refList == null) return null;

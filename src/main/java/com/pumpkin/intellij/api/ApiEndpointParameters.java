@@ -118,7 +118,7 @@ final class ApiEndpointParameters {
      * commonly pull parameter/path names from a shared constants class rather than repeating
      * string literals. Returns {@code null} if {@code expr} isn't a resolvable String constant.
      */
-    private static @Nullable String resolveStringConstant(@NotNull PsiExpression expr) {
+    static @Nullable String resolveStringConstant(@NotNull PsiExpression expr) {
         Object value = JavaPsiFacade.getInstance(expr.getProject())
                 .getConstantEvaluationHelper()
                 .computeConstantExpression(expr);
