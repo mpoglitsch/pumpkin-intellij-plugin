@@ -14,7 +14,10 @@ import com.pumpkin.intellij.util.GherkinPsiUtil;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.plugins.cucumber.psi.GherkinStep;
 
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * Provides completion for Process invocations inside Gherkin feature files.
@@ -68,12 +71,23 @@ public class PumpkinProcessCompletionContributor extends CompletionContributor {
 
             PumpkinProcessInsertHandler insertHandler = new PumpkinProcessInsertHandler();
 
+            // Grouped by name rather than one entry per definition: a process with more than one
+            // @ProcessContext(...) variant would otherwise show as several visually-identical
+            // completion entries. The insert handler decides whether to offer a context choice
+            // once the whole group of variants is known.
+            Map<String, List<PumpkinProcessDefinition>> byName = new LinkedHashMap<>();
             for (PumpkinProcessDefinition def : processes) {
-                String processName = def.getProcessName();
-                String typeText = def.getFeatureFileName() + ":" + def.getScenarioLine();
+                byName.computeIfAbsent(def.getProcessName(), k -> new ArrayList<>()).add(def);
+            }
+
+            for (Map.Entry<String, List<PumpkinProcessDefinition>> entry : byName.entrySet()) {
+                String processName = entry.getKey();
+                List<PumpkinProcessDefinition> variants = entry.getValue();
+                PumpkinProcessDefinition representative = variants.get(0);
+                String typeText = representative.getFeatureFileName() + ":" + representative.getScenarioLine();
 
                 prefixed.addElement(
-                        LookupElementBuilder.create(def, processName)
+                        LookupElementBuilder.create(variants, processName)
                                 .withPresentableText(processName)
                                 .withTypeText(typeText)
                                 .withIcon(AllIcons.Nodes.Method)

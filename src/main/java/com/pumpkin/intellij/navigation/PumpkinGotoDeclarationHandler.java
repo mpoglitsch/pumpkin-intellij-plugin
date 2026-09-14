@@ -57,8 +57,13 @@ public class PumpkinGotoDeclarationHandler implements GotoDeclarationHandler {
         String invocationText = GherkinPsiUtil.getProcessInvocationText(step);
         if (invocationText == null) return null;
 
+        // Filtered by the step's own "| ContextName" suffix (null = default variant) so that a
+        // process with more than one context variant navigates straight to the one this exact
+        // invocation actually resolves to at runtime, instead of showing every name-matching
+        // variant as an ambiguous multi-target picker.
+        String requestedContext = GherkinPsiUtil.getInvocationContextName(step);
         PumpkinProcessService service = PumpkinProcessService.getInstance(sourceElement.getProject());
-        List<PumpkinProcessDefinition> matches = service.findMatchingProcesses(invocationText);
+        List<PumpkinProcessDefinition> matches = service.findMatchingProcesses(invocationText, requestedContext);
 
         return matches.stream()
                 .map(PumpkinProcessDefinition::getScenarioPsiElement)

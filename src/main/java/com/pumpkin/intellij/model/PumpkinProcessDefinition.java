@@ -17,6 +17,7 @@ public final class PumpkinProcessDefinition {
     private final @NotNull VirtualFile featureFile;
     private final @Nullable String featureName;
     private final @NotNull String scenarioName;
+    private final @Nullable String contextName;
     private final int scenarioLine;
     private final @NotNull SmartPsiElementPointer<GherkinScenario> scenarioPointer;
     private final @NotNull List<PumpkinProcessVariable> variables;
@@ -26,6 +27,7 @@ public final class PumpkinProcessDefinition {
             @NotNull VirtualFile featureFile,
             @Nullable String featureName,
             @NotNull String scenarioName,
+            @Nullable String contextName,
             int scenarioLine,
             @NotNull SmartPsiElementPointer<GherkinScenario> scenarioPointer,
             @NotNull List<PumpkinProcessVariable> variables,
@@ -33,6 +35,7 @@ public final class PumpkinProcessDefinition {
         this.featureFile = featureFile;
         this.featureName = featureName;
         this.scenarioName = scenarioName;
+        this.contextName = contextName;
         this.scenarioLine = scenarioLine;
         this.scenarioPointer = scenarioPointer;
         this.variables = variables;
@@ -47,6 +50,8 @@ public final class PumpkinProcessDefinition {
     public @NotNull VirtualFile getFeatureFile() { return featureFile; }
     public @Nullable String getFeatureName() { return featureName; }
     public @NotNull String getScenarioName() { return scenarioName; }
+    /** The {@code @ProcessContext(...)} tag value, or {@code null} for the default variant. */
+    public @Nullable String getContextName() { return contextName; }
     public int getScenarioLine() { return scenarioLine; }
     public @NotNull List<PumpkinProcessVariable> getVariables() { return variables; }
     public @NotNull List<String> getRequiredParameters() { return requiredParameters; }
@@ -65,6 +70,7 @@ public final class PumpkinProcessDefinition {
     public String toString() {
         return "PumpkinProcessDefinition{" +
                 "scenarioName='" + scenarioName + '\'' +
+                ", contextName=" + (contextName != null ? "'" + contextName + "'" : "<default>") +
                 ", file=" + featureFile.getName() +
                 ", line=" + scenarioLine +
                 '}';

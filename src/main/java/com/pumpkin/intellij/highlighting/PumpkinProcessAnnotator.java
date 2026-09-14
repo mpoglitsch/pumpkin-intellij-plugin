@@ -20,8 +20,11 @@ import org.jetbrains.plugins.cucumber.psi.GherkinStep;
 import org.jetbrains.plugins.cucumber.psi.GherkinTable;
 import org.jetbrains.plugins.cucumber.psi.GherkinTableCell;
 import org.jetbrains.plugins.cucumber.psi.GherkinTableRow;
+import org.jetbrains.plugins.cucumber.psi.GherkinTag;
 
 import java.util.List;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * Annotates Process steps with dedicated Pumpkin text attributes:
@@ -31,6 +34,8 @@ import java.util.List;
  *   <li>Data-table value column → {@link PumpkinTextAttributeKeys#PROCESS_VARIABLE}</li>
  *   <li>Literal (non-variable) invocation text → {@link PumpkinTextAttributeKeys#PROCESS_TEXT}, forcing
  *       the default text color over Gherkin's own step-text coloring</li>
+ *   <li>The trailing "| ContextName" call-site suffix, and the {@code @ProcessContext(...)} tag on
+ *       a Process's own Scenario → {@link PumpkinTextAttributeKeys#PROCESS_CONTEXT}</li>
  * </ul>
  *
  * All of the above use {@code enforcedTextAttributes(...)} rather than {@code textAttributes(key)}:
@@ -49,6 +54,10 @@ public class PumpkinProcessAnnotator implements Annotator {
     // Mirrors GherkinPsiUtil's suffixes so the marker gets the same color as "Process:".
     private static final String WITH_DATA_SUFFIX = " with data";
     private static final String WITHOUT_DATA_SUFFIX = " without data";
+    // Mirrors GherkinPsiUtil's own CONTEXT_SUFFIX_PATTERN.
+    private static final Pattern CONTEXT_SUFFIX_PATTERN = Pattern.compile("^(.*)\\s+\\|\\s+(\\S+)\\s*$");
+    // Mirrors GherkinPsiUtil's own PROCESS_CONTEXT_TAG_PREFIX.
+    private static final String PROCESS_CONTEXT_TAG_PREFIX = "@ProcessContext(";
 
     /**
      * A misbehaving {@link Annotator} that lets an exception escape {@code annotate()} gets
@@ -80,6 +89,11 @@ public class PumpkinProcessAnnotator implements Annotator {
     }
 
     private void doAnnotate(@NotNull PsiElement element, @NotNull AnnotationHolder holder) {
+        if (element instanceof GherkinTag tag) {
+            annotateProcessContextTag(tag, holder);
+            return;
+        }
+
         if (!(element instanceof GherkinStep step)) return;
         if (!GherkinPsiUtil.isProcessStep(step)) return;
 
@@ -96,7 +110,8 @@ public class PumpkinProcessAnnotator implements Annotator {
                 stepAbsOffset + keywordRelIdx + PROCESS_COLON.length()
         ), PumpkinTextAttributeKeys.PROCESS_KEYWORD);
 
-        // -- Highlight trailing "with data"/"without data" marker with the same color --
+        // -- Highlight trailing "with data"/"without data" marker, and the "| ContextName"
+        // marker (if present), with their own colors --
         int invocationRelStart = keywordRelIdx + PROCESS_PREFIX.length();
         if (invocationRelStart <= fullStepText.length()) {
             int newlineIdx = fullStepText.indexOf('\n', invocationRelStart);
@@ -108,6 +123,9 @@ public class PumpkinProcessAnnotator implements Annotator {
             }
             String invocationLine = fullStepText.substring(invocationRelStart, invocationRelEnd);
 
+            // "with data"/"without data" is always the literal tail of the step text, regardless
+            // of whether a "| ContextName" suffix precedes it - detected exactly as before context
+            // support existed.
             String suffix = null;
             if (invocationLine.endsWith(WITH_DATA_SUFFIX)) {
                 suffix = WITH_DATA_SUFFIX;
@@ -121,6 +139,20 @@ public class PumpkinProcessAnnotator implements Annotator {
                         stepAbsOffset + suffixRelStart,
                         stepAbsOffset + invocationRelEnd
                 ), PumpkinTextAttributeKeys.PROCESS_KEYWORD);
+
+                // The "| ContextName" suffix, if present, sits right before that marker - check
+                // the text before it (excluding the marker's own leading space).
+                String beforeMarker = invocationLine.substring(0, invocationLine.length() - suffix.length());
+                Matcher contextMatcher = CONTEXT_SUFFIX_PATTERN.matcher(beforeMarker);
+                if (contextMatcher.matches()) {
+                    String beforeContext = contextMatcher.group(1);
+                    int contextRelStart = invocationRelStart + beforeContext.length() + 1; // skip space before '|'
+                    int contextRelEnd = invocationRelStart + beforeMarker.length();
+                    annotateRange(holder, stepRange, new TextRange(
+                            stepAbsOffset + contextRelStart,
+                            stepAbsOffset + contextRelEnd
+                    ), PumpkinTextAttributeKeys.PROCESS_CONTEXT);
+                }
             }
         }
 
@@ -143,9 +175,15 @@ public class PumpkinProcessAnnotator implements Annotator {
         String invocationText = GherkinPsiUtil.getProcessInvocationText(step);
         if (invocationText == null || invocationText.isBlank()) return;
 
+        // Filtered by the step's own "| ContextName" suffix (null = default variant), not just
+        // by name: without this, a process with more than one context variant would always look
+        // ambiguous here (multiple name-matches), even though the context suffix on this exact
+        // step already resolves it to exactly one - matching how PumpkinProcessService's own doc
+        // comment on the 2-arg overload explains this.
+        String requestedContext = GherkinPsiUtil.getInvocationContextName(step);
         List<PumpkinProcessDefinition> matches =
                 PumpkinProcessService.getInstance(step.getProject())
-                        .findMatchingProcesses(invocationText);
+                        .findMatchingProcesses(invocationText, requestedContext);
 
         if (matches.size() != 1) return; // ambiguous or no match – skip variable highlighting
 
@@ -177,6 +215,15 @@ public class PumpkinProcessAnnotator implements Annotator {
         }
     }
 
+    /** Highlights an {@code @ProcessContext(...)} tag on a Process's own Scenario declaration. */
+    private static void annotateProcessContextTag(@NotNull GherkinTag tag, @NotNull AnnotationHolder holder) {
+        String name = tag.getName();
+        if (name == null || !name.startsWith(PROCESS_CONTEXT_TAG_PREFIX) || !name.endsWith(")")) return;
+
+        TextRange tagRange = tag.getTextRange();
+        annotateRange(holder, tagRange, tagRange, PumpkinTextAttributeKeys.PROCESS_CONTEXT);
+    }
+
     private static void annotateDefaultText(@NotNull AnnotationHolder holder, @NotNull TextRange stepRange,
                                             int start, int end) {
         if (start >= end) return;
@@ -194,7 +241,16 @@ public class PumpkinProcessAnnotator implements Annotator {
     private static void annotateRange(@NotNull AnnotationHolder holder, @NotNull TextRange stepRange,
                                       @NotNull TextRange range, @NotNull TextAttributesKey key) {
         if (range.isEmpty() || !stepRange.contains(range)) return;
-        holder.newSilentAnnotation(HighlightSeverity.INFORMATION)
+        // ERROR (highest standard severity), not INFORMATION: newSilentAnnotation's own contract
+        // is "no message/tooltip/gutter icon/problem-panel entry regardless of severity - when
+        // several annotations overlap the same range, the one with the highest severity wins."
+        // That's a real, separate priority axis from annotator *registration* order (which is
+        // what "order=..." in plugin.xml controls) - confirmed necessary here because Cucumber's
+        // own reference-based "resolved step parameter" highlighting (only for text matching a
+        // capture group in the real step-definition regex, e.g. the context name but not the rest
+        // of the invocation text) evidently uses a higher severity than INFORMATION, so it kept
+        // winning that one sub-range even after this annotator was ordered to run after Gherkin's.
+        holder.newSilentAnnotation(HighlightSeverity.ERROR)
                 .range(range)
                 .enforcedTextAttributes(resolve(key))
                 .create();

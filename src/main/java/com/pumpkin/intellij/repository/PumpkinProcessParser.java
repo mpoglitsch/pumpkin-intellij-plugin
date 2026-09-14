@@ -70,6 +70,7 @@ public final class PumpkinProcessParser {
         int lineNumber = computeLineNumber(vf, scenario.getTextOffset());
         List<PumpkinProcessVariable> variables = extractVariables(scenarioName);
         List<String> requiredParams = GherkinPsiUtil.parseRequiredParameters(scenario);
+        String contextName = GherkinPsiUtil.getContextName(scenario);
 
         var pointer = SmartPointerManager.getInstance(scenario.getProject())
                 .createSmartPsiElementPointer(scenario, gherkinFile);
@@ -78,6 +79,7 @@ public final class PumpkinProcessParser {
                 vf,
                 featureName,
                 scenarioName,
+                contextName,
                 lineNumber,
                 pointer,
                 variables,

@@ -58,8 +58,16 @@
                 instance="com.pumpkin.intellij.settings.PumpkinSettingsConfigurable"/>
 
         <!-- ── Annotator ── -->
+        <!-- order="after ...GherkinAnnotator": must run after Gherkin's own bundled annotator
+             (org.jetbrains.plugins.cucumber.psi.annotator.GherkinAnnotator, registered in
+             gherkin.jar), which colors any part of a step resolved as a GherkinStepParameter -
+             i.e. text matching a capture group in the underlying step-definition regex (e.g. the
+             "| ContextName" suffix, once that regex has a group for it). A plain order="last"
+             wasn't a strong enough guarantee against another equally-"last" entry - naming
+             Gherkin's own annotator explicitly is deterministic. -->
         <annotator
                 language="Gherkin"
+                order="after org.jetbrains.plugins.cucumber.psi.annotator.GherkinAnnotator"
                 implementationClass="com.pumpkin.intellij.highlighting.PumpkinProcessAnnotator"/>
 
         <!-- ── Warns on a generated "auth:" step whose API's proxy overrides
@@ -151,6 +159,15 @@
                 enabledByDefault="true"
                 level="ERROR"
                 implementationClass="com.pumpkin.intellij.inspection.PumpkinProcessRecursionInspection"/>
+
+        <localInspection
+                language="Gherkin"
+                shortName="PumpkinDuplicateProcessContext"
+                displayName="Duplicate Pumpkin Process name/context"
+                groupName="Pumpkin"
+                enabledByDefault="true"
+                level="ERROR"
+                implementationClass="com.pumpkin.intellij.inspection.DuplicateProcessContextInspection"/>
 
         <!-- ── Gherkin section folding (# Section: … / # End) ── -->
         <lang.foldingBuilder

@@ -20,6 +20,8 @@ import java.util.List;
  *       caret left between the parentheses.</li>
  *   <li>{@code @setsParameters()} – context parameters the Process sets, caret left between the
  *       parentheses.</li>
+ *   <li>{@code @ProcessContext()} – selects which context variant this Scenario is, caret left
+ *       between the parentheses.</li>
  * </ul>
  * {@code @processRequired()}/{@code @requiredParameters()} are still both offered as equivalent
  * aliases (see {@link com.pumpkin.intellij.util.GherkinPsiUtil}). {@code @setsContextParameters()}
@@ -35,7 +37,8 @@ public class PumpkinTagCompletionContributor extends CompletionContributor {
 
     private static final List<String> PAREN_SUGGESTIONS = List.of(
             "@processRequired()", "@requiredParameters()",
-            "@setsParameters()"
+            "@setsParameters()",
+            "@ProcessContext()"
     );
 
     public PumpkinTagCompletionContributor() {

@@ -38,5 +38,17 @@ public final class PumpkinTextAttributeKeys {
                     HighlighterColors.TEXT
             );
 
+    /**
+     * Applied to a Process context marker: the {@code @ProcessContext(...)} tag on a Process's
+     * own definition, and the trailing {@code | ContextName} suffix on a call-site invocation.
+     * Deliberately its own distinct color (not reusing {@link #PROCESS_KEYWORD}/{@link
+     * #PROCESS_VARIABLE}) so a context is immediately recognizable wherever it appears.
+     */
+    public static final TextAttributesKey PROCESS_CONTEXT =
+            TextAttributesKey.createTextAttributesKey(
+                    "PUMPKIN_PROCESS_CONTEXT",
+                    DefaultLanguageHighlighterColors.KEYWORD
+            );
+
     private PumpkinTextAttributeKeys() {}
 }

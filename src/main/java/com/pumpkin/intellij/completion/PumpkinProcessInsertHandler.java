@@ -3,15 +3,22 @@ package com.pumpkin.intellij.completion;
 import com.intellij.codeInsight.completion.InsertHandler;
 import com.intellij.codeInsight.completion.InsertionContext;
 import com.intellij.codeInsight.lookup.LookupElement;
+import com.intellij.openapi.command.WriteCommandAction;
 import com.intellij.openapi.editor.Document;
 import com.intellij.openapi.editor.Editor;
+import com.intellij.openapi.editor.RangeMarker;
+import com.intellij.openapi.project.Project;
+import com.intellij.openapi.ui.popup.JBPopupFactory;
 import com.intellij.psi.PsiElement;
 import com.intellij.psi.util.PsiTreeUtil;
 import com.pumpkin.intellij.model.PumpkinProcessDefinition;
+import com.intellij.ui.SimpleListCellRenderer;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.jetbrains.plugins.cucumber.psi.GherkinStep;
 
+import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.regex.Pattern;
 
@@ -24,6 +31,10 @@ import java.util.regex.Pattern;
  *       process invocation – variable placeholders are stripped, leaving the user to type values.</li>
  *   <li>Appends a Gherkin data-table with one row per required parameter.</li>
  *   <li>Positions the caret after the first variable placeholder so the user can type immediately.</li>
+ *   <li>If the chosen name has more than one {@code @ProcessContext(...)} variant, follows up with
+ *       a "Choose Context" popup; picking a non-default one appends the {@code | ContextName}
+ *       suffix right after the with/without-data marker (see {@code GherkinPsiUtil}'s doc on that
+ *       suffix). One variant (or "Default") means no suffix is added - identical to today.</li>
  * </ol>
  */
 public class PumpkinProcessInsertHandler implements InsertHandler<LookupElement> {
@@ -33,7 +44,10 @@ public class PumpkinProcessInsertHandler implements InsertHandler<LookupElement>
     @Override
     public void handleInsert(@NotNull InsertionContext context, @NotNull LookupElement item) {
         Object obj = item.getObject();
-        if (!(obj instanceof PumpkinProcessDefinition def)) return;
+        if (!(obj instanceof List<?> rawVariants) || rawVariants.isEmpty()) return;
+        @SuppressWarnings("unchecked")
+        List<PumpkinProcessDefinition> variants = (List<PumpkinProcessDefinition>) rawVariants;
+        PumpkinProcessDefinition def = variants.get(0);
 
         Document document = context.getDocument();
         Editor editor = context.getEditor();
@@ -59,9 +73,72 @@ public class PumpkinProcessInsertHandler implements InsertHandler<LookupElement>
         // Position caret: after the process name, ready to type the first variable value.
         int caretOffset = replaceStart + processText.length();
         editor.getCaretModel().moveToOffset(caretOffset);
+
+        if (variants.size() > 1) {
+            // Anchored to the with/without-data marker's own (already-inserted) span, not a raw
+            // offset at the caret's position above: the user may well start typing a variable
+            // value right at that position before ever acting on the popup below, and a
+            // RangeMarker over real, stable text correctly shifts to stay attached to that text
+            // when something is inserted before it - a zero-width marker at the caret's own
+            // position would have no well-defined side to stick to in that same situation.
+            int dataSuffixStart = replaceStart + processText.length();
+            RangeMarker dataSuffixMarker = document.createRangeMarker(dataSuffixStart, dataSuffixStart + dataSuffix.length());
+            offerContextChoice(context.getProject(), editor, variants, dataSuffixMarker);
+        }
     }
 
     // -------------------------------------------------------------------------
+
+    /**
+     * {@code toString()} is overridden (not left to the default record-generated one) for the
+     * same reason the {@code api:}/{@code auth:} shortcut popups' own choice records do - see
+     * {@code ApiStepPopups.ApiChoice}'s doc comment: Swing's {@code JList} "type ahead to select"
+     * calls {@code toString()} on list model items outside any read action. This record's field
+     * is a plain String, so there's no PSI-read risk here, but the default record toString() would
+     * still produce an unhelpful "ContextChoice[...]" string for that raw Swing lookup.
+     */
+    private record ContextChoice(@Nullable String contextName, @NotNull String displayText) {
+        @Override
+        public String toString() { return displayText; }
+    }
+
+    /**
+     * Shows a "Choose Context" popup listing every context name in {@code variants} (plus
+     * "Default" for an untagged one, if present). Picking "Default" inserts nothing further;
+     * picking a real name inserts {@code | <Name>} right before the with/without-data marker
+     * {@code dataSuffixMarker} tracks, moving it earlier in the text as needed if the user typed
+     * anything before it in the meantime (see the caller's own comment on why this is anchored to
+     * that marker rather than a raw offset).
+     */
+    private static void offerContextChoice(@Nullable Project project, @NotNull Editor editor,
+                                           @NotNull List<PumpkinProcessDefinition> variants,
+                                           @NotNull RangeMarker dataSuffixMarker) {
+        if (project == null) return;
+
+        List<ContextChoice> choices = new ArrayList<>();
+        for (PumpkinProcessDefinition variant : variants) {
+            String contextName = variant.getContextName();
+            String displayText = contextName != null ? contextName : "Default";
+            if (choices.stream().noneMatch(c -> displayText.equals(c.displayText()))) {
+                choices.add(new ContextChoice(contextName, displayText));
+            }
+        }
+        choices.sort(Comparator.comparing(ContextChoice::displayText));
+
+        JBPopupFactory.getInstance()
+                .createPopupChooserBuilder(choices)
+                .setTitle("Choose Context")
+                .setRenderer(SimpleListCellRenderer.create("", ContextChoice::displayText))
+                .setNamerForFiltering(ContextChoice::displayText)
+                .setItemChosenCallback(choice -> {
+                    if (choice.contextName() == null || !dataSuffixMarker.isValid()) return;
+                    WriteCommandAction.runWriteCommandAction(project, "Insert Process Context", null, () ->
+                            dataSuffixMarker.getDocument()
+                                    .insertString(dataSuffixMarker.getStartOffset(), " | " + choice.contextName()));
+                })
+                .createPopup()
+                .showInBestPositionFor(editor);
+    }
 
     /**
      * Locate the document offset where the process invocation text (after "Process: ") starts.

@@ -10,4 +10,10 @@
       <option name="FOREGROUND" value="5c92ff"/>
     </value>
   </option>
+  <option name="PUMPKIN_PROCESS_CONTEXT">
+    <value>
+      <option name="FOREGROUND" value="c678dd"/>
+      <option name="FONT_TYPE" value="1"/>
+    </value>
+  </option>
 </list>

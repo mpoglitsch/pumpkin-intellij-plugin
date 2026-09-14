@@ -63,9 +63,13 @@ public class PumpkinProcessInspection extends LocalInspectionTool {
         String invocationText = GherkinPsiUtil.getProcessInvocationText(step);
         if (invocationText == null) return;
 
+        // Filtered by the step's own "| ContextName" suffix (null = default variant) - without
+        // this, a process with more than one @ProcessContext(...) variant would always look
+        // ambiguous here, even at a call site whose suffix already resolves it to exactly one.
+        String requestedContext = GherkinPsiUtil.getInvocationContextName(step);
         PumpkinProcessService service =
                 PumpkinProcessService.getInstance(step.getProject());
-        List<PumpkinProcessDefinition> matches = service.findMatchingProcesses(invocationText);
+        List<PumpkinProcessDefinition> matches = service.findMatchingProcesses(invocationText, requestedContext);
 
         if (matches.isEmpty()) return; // unresolved – handled by the unresolved-reference highlight
 

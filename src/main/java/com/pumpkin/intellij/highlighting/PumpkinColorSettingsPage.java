@@ -21,6 +21,7 @@ public class PumpkinColorSettingsPage implements ColorSettingsPage {
             new AttributesDescriptor("Process keyword//Process:", PumpkinTextAttributeKeys.PROCESS_KEYWORD),
             new AttributesDescriptor("Process variable value", PumpkinTextAttributeKeys.PROCESS_VARIABLE),
             new AttributesDescriptor("Process literal text", PumpkinTextAttributeKeys.PROCESS_TEXT),
+            new AttributesDescriptor("Process context", PumpkinTextAttributeKeys.PROCESS_CONTEXT),
     };
 
     @Override
@@ -35,7 +36,7 @@ public class PumpkinColorSettingsPage implements ColorSettingsPage {
 
     @Override
     public @NotNull String getDemoText() {
-        return "* <keyword>Process:</keyword> <text>Create customer</text> <variable>Hans</variable> <keyword>with data</keyword>\n" +
+        return "* <keyword>Process:</keyword> <text>Create customer</text> <variable>Hans</variable> <context>| MobileApp</context> <keyword>with data</keyword>\n" +
                "    | service | <variable>25736</variable>      |\n" +
                "    | name    | <variable>Hans Peter</variable> |\n";
     }
@@ -45,7 +46,8 @@ public class PumpkinColorSettingsPage implements ColorSettingsPage {
         return Map.of(
                 "keyword", PumpkinTextAttributeKeys.PROCESS_KEYWORD,
                 "variable", PumpkinTextAttributeKeys.PROCESS_VARIABLE,
-                "text", PumpkinTextAttributeKeys.PROCESS_TEXT
+                "text", PumpkinTextAttributeKeys.PROCESS_TEXT,
+                "context", PumpkinTextAttributeKeys.PROCESS_CONTEXT
         );
     }
 

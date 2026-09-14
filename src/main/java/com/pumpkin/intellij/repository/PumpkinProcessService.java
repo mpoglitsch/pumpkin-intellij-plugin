@@ -14,11 +14,13 @@ import com.intellij.openapi.application.ReadAction;
 import com.pumpkin.intellij.matching.PumpkinProcessMatcher;
 import com.pumpkin.intellij.model.PumpkinProcessDefinition;
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 import org.jetbrains.plugins.cucumber.psi.GherkinFile;
 
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
@@ -116,6 +118,23 @@ public final class PumpkinProcessService implements Disposable {
     public @NotNull List<PumpkinProcessDefinition> findMatchingProcesses(@NotNull String invocationText) {
         return getProcesses().stream()
                 .filter(def -> PumpkinProcessMatcher.matches(def, invocationText))
+                .collect(Collectors.toList());
+    }
+
+    /**
+     * Returns the processes whose pattern matches {@code invocationText} <em>and</em> whose
+     * {@code @ProcessContext(...)} tag equals {@code requestedContext} - {@code null} means "the
+     * default (untagged) variant", the same convention used by the call-site {@code |
+     * ContextName} suffix ({@link com.pumpkin.intellij.util.GherkinPsiUtil#getInvocationContextName})
+     * and by {@code ProcessExecutor.execute}'s {@code contextName} parameter at runtime. Without
+     * this filter, a process with more than one context variant would look ambiguous (multiple
+     * name-matches) to every caller that actually wants the one specific variant a given
+     * invocation resolves to.
+     */
+    public @NotNull List<PumpkinProcessDefinition> findMatchingProcesses(
+            @NotNull String invocationText, @Nullable String requestedContext) {
+        return findMatchingProcesses(invocationText).stream()
+                .filter(def -> Objects.equals(def.getContextName(), requestedContext))
                 .collect(Collectors.toList());
     }
 

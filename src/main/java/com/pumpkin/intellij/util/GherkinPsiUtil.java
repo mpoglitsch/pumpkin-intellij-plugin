@@ -11,6 +11,8 @@ import org.jetbrains.plugins.cucumber.psi.GherkinTag;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * Stateless helpers for inspecting Gherkin PSI elements.
@@ -33,6 +35,12 @@ public final class GherkinPsiUtil {
     // "@setsParameters(...)" is accepted as an alias of "@setsContextParameters(...)".
     private static final String SETS_CONTEXT_PARAMETERS_PREFIX = "@setsContextParameters(";
     private static final String SETS_PARAMETERS_PREFIX = "@setsParameters(";
+    // Deliberately named differently from "@setsContextParameters" above - that tag declares
+    // which RPTAContext values a Process *sets* as a side effect (unrelated concept); this one
+    // selects *which variant* of the Process to run.
+    private static final String PROCESS_CONTEXT_TAG_PREFIX = "@ProcessContext(";
+    // Trailing "| ContextName" suffix on a Process invocation step, after "with/without data".
+    private static final Pattern CONTEXT_SUFFIX_PATTERN = Pattern.compile("^(.*)\\s+\\|\\s+(\\S+)\\s*$");
 
     private GherkinPsiUtil() {}
 
@@ -50,20 +58,69 @@ public final class GherkinPsiUtil {
     }
 
     /**
-     * Returns the invocation text: everything after {@code "Process: "} in the step name
-     * and before the trailing {@code " with data"}/{@code " without data"} marker (if present),
-     * or {@code null} if the step is not a Process step.
+     * Returns the invocation text: everything after {@code "Process: "} in the step's own first
+     * line of text and before the {@code | ContextName} suffix (if present - see
+     * {@link #getInvocationContextName}) and the trailing {@code " with data"}/
+     * {@code " without data"} marker, or {@code null} if the step is not a Process step. The
+     * marker is always the literal tail of the step text - the context suffix, when present, sits
+     * *before* it (e.g. {@code "X | MobileApp with data"}).
      */
     public static @Nullable String getProcessInvocationText(@NotNull GherkinStep step) {
-        String name = step.getName();
-        if (name == null || !name.startsWith(PROCESS_PREFIX)) return null;
-        String invocation = name.substring(PROCESS_PREFIX.length());
-        return stripDataSuffix(invocation);
+        String invocation = rawInvocationLine(step);
+        if (invocation == null) return null;
+        return stripContextSuffix(stripDataSuffix(invocation));
+    }
+
+    /**
+     * Returns the {@code ContextName} from a {@code | ContextName} suffix on a Process invocation
+     * step (e.g. {@code Process: X | MobileApp with data}), or {@code null} if the step has no
+     * such suffix or isn't a Process step at all. A missing suffix means "use the default
+     * (untagged) {@code @ProcessContext} variant" - the same convention
+     * {@code ProcessExecutor.execute}'s {@code contextName} parameter uses at runtime.
+     */
+    public static @Nullable String getInvocationContextName(@NotNull GherkinStep step) {
+        String invocation = rawInvocationLine(step);
+        if (invocation == null) return null;
+        Matcher m = CONTEXT_SUFFIX_PATTERN.matcher(stripDataSuffix(invocation));
+        return m.matches() ? m.group(2) : null;
+    }
+
+    /**
+     * Returns the text after {@code "Process: "} on the step's own first line of raw text
+     * ({@link GherkinStep#getText()}), or {@code null} if this isn't a Process step. Deliberately
+     * based on raw text rather than {@link GherkinStep#getName()}: Gherkin's own PSI
+     * implementation (GherkinStepImpl.getElementText()) builds {@code getName()} by concatenating
+     * only specific child-token types (TEXT, STEP_PARAMETER, WHITE_SPACE, STEP_PARAMETER_TEXT,
+     * STEP_PARAMETER_BRACE - confirmed by disassembling the bundled Gherkin plugin's own
+     * GherkinStepImpl.class), which silently drops a literal {@code |} appearing inline in step
+     * text - it's lexed with its own reserved table-cell-delimiter token type, not one of those -
+     * even though it isn't part of an actual data table here. That previously made {@code |
+     * ContextName} invisible to every caller of this method: {@code getInvocationContextName}
+     * always returned {@code null}, and the "clean" invocation text still had the context name
+     * glued onto the end (pipe silently removed, name kept), which then got swallowed into the
+     * Process's own last {@code {variable}} capture group by {@code PumpkinProcessMatcher} and
+     * colored as a matched variable value instead of a context name. Raw text has no such
+     * filtering - lookups via {@code indexOf} rather than requiring the prefix at position 0
+     * mirror {@code PumpkinProcessAnnotator}'s own already-working raw-text parsing, which finds
+     * {@code "Process:"} the same way regardless of which keyword precedes it.
+     */
+    private static @Nullable String rawInvocationLine(@NotNull GherkinStep step) {
+        String text = step.getText();
+        int newlineIdx = text.indexOf('\n');
+        String firstLine = newlineIdx >= 0 ? text.substring(0, newlineIdx) : text;
+        if (firstLine.endsWith("\r")) {
+            firstLine = firstLine.substring(0, firstLine.length() - 1);
+        }
+
+        int idx = firstLine.indexOf(PROCESS_PREFIX);
+        return idx < 0 ? null : firstLine.substring(idx + PROCESS_PREFIX.length());
     }
 
     /**
      * Strips a trailing {@code " with data"}/{@code " without data"} marker from the invocation
-     * text, if present. Steps without a marker are returned unchanged.
+     * text, if present. Steps without a marker are returned unchanged. This marker is always the
+     * literal tail of the step text, regardless of whether a {@code | ContextName} suffix precedes
+     * it, so this needs no awareness of that suffix at all.
      */
     private static @NotNull String stripDataSuffix(@NotNull String invocation) {
         if (invocation.endsWith(WITH_DATA_SUFFIX)) {
@@ -73,6 +130,17 @@ public final class GherkinPsiUtil {
             return invocation.substring(0, invocation.length() - WITHOUT_DATA_SUFFIX.length());
         }
         return invocation;
+    }
+
+    /**
+     * Strips a trailing {@code | ContextName} suffix, if present - applied *after*
+     * {@link #stripDataSuffix} since the suffix sits before that marker (e.g.
+     * {@code "X | MobileApp"} -> {@code "X"}, once {@code stripDataSuffix} has already removed the
+     * trailing {@code " with data"}/{@code " without data"}).
+     */
+    private static @NotNull String stripContextSuffix(@NotNull String invocation) {
+        Matcher m = CONTEXT_SUFFIX_PATTERN.matcher(invocation);
+        return m.matches() ? m.group(1) : invocation;
     }
 
     // -------------------------------------------------------------------------
@@ -116,6 +184,24 @@ public final class GherkinPsiUtil {
      */
     public static @NotNull List<String> parseSetsContextParameters(@NotNull GherkinScenario scenario) {
         return parseTagArguments(scenario, SETS_CONTEXT_PARAMETERS_PREFIX, SETS_PARAMETERS_PREFIX);
+    }
+
+    /**
+     * Parses the {@code @ProcessContext(...)} tag value, or {@code null} if the scenario has no
+     * such tag - meaning it's the default variant (see {@link #getInvocationContextName} for the
+     * call-site counterpart). Deliberately separate from {@link #parseSetsContextParameters}
+     * despite the similar name - see {@link #PROCESS_CONTEXT_TAG_PREFIX}'s own doc comment.
+     */
+    public static @Nullable String getContextName(@NotNull GherkinScenario scenario) {
+        for (GherkinTag tag : scenario.getTags()) {
+            String name = tag.getName();
+            if (name == null) continue;
+            if (name.startsWith(PROCESS_CONTEXT_TAG_PREFIX) && name.endsWith(")")) {
+                String content = name.substring(PROCESS_CONTEXT_TAG_PREFIX.length(), name.length() - 1).trim();
+                return content.isEmpty() ? null : content;
+            }
+        }
+        return null;
     }
 
     /** Shared parsing for comma-separated {@code @tagName(a, b, c)} tag arguments, trying each alias prefix in turn. */
