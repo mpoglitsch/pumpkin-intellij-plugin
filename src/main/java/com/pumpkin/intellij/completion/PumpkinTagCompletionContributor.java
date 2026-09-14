@@ -24,10 +24,9 @@ import java.util.List;
  *       between the parentheses.</li>
  * </ul>
  * {@code @processRequired()}/{@code @requiredParameters()} are still both offered as equivalent
- * aliases (see {@link com.pumpkin.intellij.util.GherkinPsiUtil}). {@code @setsContextParameters()}
- * is the older name for {@code @setsParameters()} - still parsed for backward compatibility with
- * existing feature files, but no longer suggested here, since {@code @setsParameters()} is now the
- * only name new tags should be written with.
+ * aliases (see {@link com.pumpkin.intellij.util.GherkinPsiUtil}). {@code @setsParameters()} is the
+ * only name for that tag - the older {@code @setsContextParameters()} alias has been removed
+ * entirely (no longer parsed at all, not just unsuggested).
  *
  * <p>Does not suppress normal Gherkin tag completion — this just adds extra suggestions.
  */

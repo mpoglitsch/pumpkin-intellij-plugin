@@ -32,12 +32,10 @@ public final class GherkinPsiUtil {
     // "@requiredParameters(...)" is accepted as an alias of "@processRequired(...)".
     private static final String PROCESS_REQUIRED_PREFIX = "@processRequired(";
     private static final String REQUIRED_PARAMETERS_PREFIX = "@requiredParameters(";
-    // "@setsParameters(...)" is accepted as an alias of "@setsContextParameters(...)".
-    private static final String SETS_CONTEXT_PARAMETERS_PREFIX = "@setsContextParameters(";
     private static final String SETS_PARAMETERS_PREFIX = "@setsParameters(";
-    // Deliberately named differently from "@setsContextParameters" above - that tag declares
-    // which RPTAContext values a Process *sets* as a side effect (unrelated concept); this one
-    // selects *which variant* of the Process to run.
+    // Deliberately named differently from "@setsParameters" above - that tag declares which
+    // RPTAContext values a Process *sets* as a side effect (unrelated concept); this one selects
+    // *which variant* of the Process to run.
     private static final String PROCESS_CONTEXT_TAG_PREFIX = "@ProcessContext(";
     // Trailing "| ContextName" suffix on a Process invocation step, after "with/without data".
     private static final Pattern CONTEXT_SUFFIX_PATTERN = Pattern.compile("^(.*)\\s+\\|\\s+(\\S+)\\s*$");
@@ -178,18 +176,17 @@ public final class GherkinPsiUtil {
     }
 
     /**
-     * Parses the {@code @setsContextParameters(...)} tag value (or its {@code @setsParameters(...)}
-     * alias) and returns the list of context parameter names the Process sets when executed, or an
-     * empty list if neither tag is present.
+     * Parses the {@code @setsParameters(...)} tag value and returns the list of context parameter
+     * names the Process sets when executed, or an empty list if the tag isn't present.
      */
-    public static @NotNull List<String> parseSetsContextParameters(@NotNull GherkinScenario scenario) {
-        return parseTagArguments(scenario, SETS_CONTEXT_PARAMETERS_PREFIX, SETS_PARAMETERS_PREFIX);
+    public static @NotNull List<String> parseSetsParameters(@NotNull GherkinScenario scenario) {
+        return parseTagArguments(scenario, SETS_PARAMETERS_PREFIX);
     }
 
     /**
      * Parses the {@code @ProcessContext(...)} tag value, or {@code null} if the scenario has no
      * such tag - meaning it's the default variant (see {@link #getInvocationContextName} for the
-     * call-site counterpart). Deliberately separate from {@link #parseSetsContextParameters}
+     * call-site counterpart). Deliberately separate from {@link #parseSetsParameters}
      * despite the similar name - see {@link #PROCESS_CONTEXT_TAG_PREFIX}'s own doc comment.
      */
     public static @Nullable String getContextName(@NotNull GherkinScenario scenario) {

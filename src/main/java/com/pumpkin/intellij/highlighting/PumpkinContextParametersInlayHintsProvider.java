@@ -26,11 +26,11 @@ import java.util.List;
 
 /**
  * Shows a small tag above each {@code Process: ...} step listing the context parameters the
- * matched Process sets, declared via a {@code @setsContextParameters(name, other)} tag on its
+ * matched Process sets, declared via a {@code @setsParameters(name, other)} tag on its
  * {@code @pumpkin} Scenario. The parameter names themselves are bold.
  *
  * <pre>
- *   [🔧 Sets Context Parameters: <b>orderId, customerId</b>]
+ *   [🔧 Sets Parameters: <b>orderId, customerId</b>]
  *   When I execute * Process: Create order
  * </pre>
  */
@@ -85,15 +85,20 @@ public class PumpkinContextParametersInlayHintsProvider implements InlayHintsPro
                 String invocationText = GherkinPsiUtil.getProcessInvocationText(step);
                 if (invocationText == null || invocationText.isBlank()) return true;
 
+                // Filtered by the step's own "| ContextName" suffix (null = default variant) -
+                // without this, a process with more than one @ProcessContext(...) variant would
+                // always look ambiguous here (multiple name-matches), even though the context
+                // suffix on this exact step already resolves it to exactly one.
+                String requestedContext = GherkinPsiUtil.getInvocationContextName(step);
                 List<PumpkinProcessDefinition> matches =
                         PumpkinProcessService.getInstance(step.getProject())
-                                .findMatchingProcesses(invocationText);
+                                .findMatchingProcesses(invocationText, requestedContext);
                 if (matches.size() != 1) return true; // ambiguous or no match — nothing to show
 
                 GherkinScenario scenario = matches.get(0).getScenarioPsiElement();
                 if (scenario == null) return true;
 
-                List<String> params = GherkinPsiUtil.parseSetsContextParameters(scenario);
+                List<String> params = GherkinPsiUtil.parseSetsParameters(scenario);
                 if (params.isEmpty()) return true;
 
                 // Derive indentation from the step's position in the document.
@@ -106,7 +111,7 @@ public class PumpkinContextParametersInlayHintsProvider implements InlayHintsPro
                 InlayPresentation tag = factory.roundWithBackground(
                         factory.seq(
                                 factory.smallScaledIcon(AllIcons.Nodes.Parameter),
-                                factory.smallText(" Sets Context Parameters: "),
+                                factory.smallText(" Sets Parameters: "),
                                 bold(factory.smallText(String.join(", ", params)))
                         )
                 );

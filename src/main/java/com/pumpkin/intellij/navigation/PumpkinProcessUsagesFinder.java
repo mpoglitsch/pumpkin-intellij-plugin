@@ -19,6 +19,7 @@ import org.jetbrains.plugins.cucumber.psi.GherkinStep;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 
 /**
  * Finds every {@code Process: ...} step usage across the whole project that invokes a given
@@ -26,14 +27,23 @@ import java.util.List;
  * Scenario). Scans every Gherkin file in the project rather than reusing
  * {@link com.pumpkin.intellij.repository.PumpkinProcessService}, which only knows about process
  * *definitions* inside the configured process directories — invocations can appear anywhere.
+ *
+ * <p>Matching is by name pattern <em>and</em> {@code @ProcessContext(...)}: two Scenarios can
+ * share a name and differ only by context (see {@code GherkinPsiUtil.getContextName}), so a name
+ * match alone would treat every call site of either variant as a usage of both. A step's own
+ * {@code | ContextName} suffix (or its absence, meaning the default variant) is compared against
+ * {@code scenario}'s own context, the same null-safe convention used everywhere else this
+ * distinction matters ({@code PumpkinProcessService.findMatchingProcesses(text, context)},
+ * {@code PumpkinGotoDeclarationHandler}, {@code ProcessExecutor.findProcess} at runtime).
  */
 final class PumpkinProcessUsagesFinder {
 
     private PumpkinProcessUsagesFinder() {}
 
     /**
-     * Returns every {@link GherkinStep} project-wide whose invocation text matches
-     * {@code scenario}, or an empty list if it isn't a {@code @pumpkin} Scenario or has no usages.
+     * Returns every {@link GherkinStep} project-wide whose invocation text and requested context
+     * both match {@code scenario}, or an empty list if it isn't a {@code @pumpkin} Scenario or has
+     * no usages.
      */
     static @NotNull List<GherkinStep> findUsages(@NotNull Project project, @NotNull GherkinScenario scenario) {
         PumpkinProcessDefinition def = definitionFor(scenario);
@@ -49,9 +59,12 @@ final class PumpkinProcessUsagesFinder {
             for (GherkinStep step : PsiTreeUtil.findChildrenOfType(gherkinFile, GherkinStep.class)) {
                 if (!GherkinPsiUtil.isProcessStep(step)) continue;
                 String invocationText = GherkinPsiUtil.getProcessInvocationText(step);
-                if (invocationText != null && PumpkinProcessMatcher.matches(def, invocationText)) {
-                    usages.add(step);
-                }
+                if (invocationText == null || !PumpkinProcessMatcher.matches(def, invocationText)) continue;
+
+                String requestedContext = GherkinPsiUtil.getInvocationContextName(step);
+                if (!Objects.equals(requestedContext, def.getContextName())) continue;
+
+                usages.add(step);
             }
         }
         return usages;

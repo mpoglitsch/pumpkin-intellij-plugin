@@ -77,7 +77,7 @@
                 language="Gherkin"
                 implementationClass="com.pumpkin.intellij.api.AuthStepAnnotator"/>
 
-        <!-- ── "Sets Context Parameters: ..." inlay hint above Process: steps ── -->
+        <!-- ── "Sets Parameters: ..." inlay hint above Process: steps ── -->
         <codeInsight.inlayProvider
                 language="Gherkin"
                 implementationClass="com.pumpkin.intellij.highlighting.PumpkinContextParametersInlayHintsProvider"/>

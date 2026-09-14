@@ -16,11 +16,15 @@ import com.intellij.ui.SimpleListCellRenderer;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.jetbrains.plugins.cucumber.psi.GherkinStep;
+import org.jetbrains.plugins.cucumber.psi.GherkinTable;
+import org.jetbrains.plugins.cucumber.psi.GherkinTableCell;
+import org.jetbrains.plugins.cucumber.psi.GherkinTableRow;
 
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
 /**
  * Handles completion insertion for a Pumpkin Process.
@@ -61,11 +65,29 @@ public class PumpkinProcessInsertHandler implements InsertHandler<LookupElement>
         int replaceStart = locateProcessNameStart(step, document, context.getStartOffset());
         int replaceEnd   = context.getTailOffset();
 
-        // Build the text to insert (invocation line + optional table).
+        // Only rows for parameters not already present as a key in the step's own existing table
+        // (if any) - re-triggering completion on a step that already has a (possibly
+        // partially-filled-in) table shouldn't duplicate rows the user already has.
+        GherkinTable existingTable = step != null ? step.getTable() : null;
+        List<String> existingKeys = collectExistingTableKeys(existingTable);
+        List<String> missingParams = def.getRequiredParameters().stream()
+                .filter(p -> !existingKeys.contains(p))
+                .collect(Collectors.toList());
+
+        // Tracks the existing table's own span across the edit below, since that edit lands
+        // earlier in the same line and would otherwise leave a plain offset stale.
+        RangeMarker existingTableMarker = existingTable == null ? null :
+                document.createRangeMarker(existingTable.getTextRange().getStartOffset(),
+                        existingTable.getTextRange().getEndOffset());
+
+        // Build the text to insert (invocation line + optional brand-new table).
         String processText = buildProcessText(def);
         boolean hasTable    = !def.getRequiredParameters().isEmpty();
         String dataSuffix   = hasTable ? " with data" : " without data";
-        String tableText    = buildTableText(def, step);
+        // A brand-new table is generated here only if the step doesn't already have one; if it
+        // does, any missing rows are appended to that existing table separately below instead,
+        // leaving already-filled-in rows untouched.
+        String tableText    = existingTable == null ? buildTableText(computeIndent(step), missingParams) : "";
         String insertText   = processText + dataSuffix + tableText;
 
         document.replaceString(replaceStart, replaceEnd, insertText);
@@ -73,6 +95,12 @@ public class PumpkinProcessInsertHandler implements InsertHandler<LookupElement>
         // Position caret: after the process name, ready to type the first variable value.
         int caretOffset = replaceStart + processText.length();
         editor.getCaretModel().moveToOffset(caretOffset);
+
+        if (existingTableMarker != null && existingTableMarker.isValid() && !missingParams.isEmpty()) {
+            String indent = computeIndent(step);
+            String extraRows = buildTableText(indent, missingParams);
+            document.insertString(existingTableMarker.getEndOffset(), extraRows);
+        }
 
         if (variants.size() > 1) {
             // Anchored to the with/without-data marker's own (already-inserted) span, not a raw
@@ -166,27 +194,38 @@ public class PumpkinProcessInsertHandler implements InsertHandler<LookupElement>
     }
 
     /**
-     * Builds the data-table rows for required parameters, indented to match the step.
-     * Returns an empty string when there are no required parameters.
+     * Builds one {@code | param |  |} row per entry in {@code params}, indented to match the
+     * step. Returns an empty string when {@code params} is empty.
      */
     @NotNull
-    private String buildTableText(@NotNull PumpkinProcessDefinition def,
-                                  @Nullable GherkinStep step) {
-        List<String> required = def.getRequiredParameters();
-        if (required.isEmpty()) return "";
-
-        String indent = computeIndent(step);
+    private String buildTableText(@NotNull String indent, @NotNull List<String> params) {
+        if (params.isEmpty()) return "";
 
         // Align key column width.
-        int maxKeyLen = required.stream().mapToInt(String::length).max().orElse(0);
+        int maxKeyLen = params.stream().mapToInt(String::length).max().orElse(0);
 
         StringBuilder sb = new StringBuilder();
-        for (String param : required) {
+        for (String param : params) {
             int pad = maxKeyLen - param.length();
             sb.append("\n").append(indent).append("| ").append(param)
               .append(" ".repeat(pad)).append(" |  |");
         }
         return sb.toString();
+    }
+
+    /** Reads the first-column key of every row in {@code table} (empty list if {@code table} is null). */
+    @NotNull
+    private List<String> collectExistingTableKeys(@Nullable GherkinTable table) {
+        List<String> keys = new ArrayList<>();
+        if (table == null) return keys;
+
+        for (GherkinTableRow row : PsiTreeUtil.findChildrenOfType(table, GherkinTableRow.class)) {
+            List<GherkinTableCell> cells = row.getPsiCells();
+            if (cells == null || cells.isEmpty()) continue;
+            String key = cells.get(0).getText().trim();
+            if (!key.isBlank()) keys.add(key);
+        }
+        return keys;
     }
 
     /** Returns the whitespace prefix of the step's line, used to indent table rows. */
