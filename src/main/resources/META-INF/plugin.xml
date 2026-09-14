@@ -213,5 +213,19 @@
                 </group>
             </group>
         </group>
+
+        <!-- ── "Extract Process...": select a run of Gherkin steps and extract them into a new
+             Process feature file under a sibling "_processes" folder. Added to the standard
+             "RefactoringMenu" group so it shows up in both the main Refactor menu and the
+             editor's right-click Refactor submenu, and shares Extract Method's own keyboard
+             shortcut via use-shortcut-of (whatever keymap/customization is active) - see
+             ExtractProcessAction's class doc. ── -->
+        <action id="Pumpkin.ExtractProcess"
+                class="com.pumpkin.intellij.refactor.ExtractProcessAction"
+                text="Extract Process..."
+                description="Extract the selected Gherkin steps into a new, reusable Pumpkin Process"
+                use-shortcut-of="ExtractMethod">
+            <add-to-group group-id="RefactoringMenu" anchor="last"/>
+        </action>
     </actions>
 </idea-plugin>
