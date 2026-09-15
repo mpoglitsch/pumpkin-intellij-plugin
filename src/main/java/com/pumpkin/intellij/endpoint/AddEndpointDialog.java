@@ -6,10 +6,11 @@ import com.intellij.openapi.module.ModuleUtilCore;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.roots.ModuleRootManager;
 import com.intellij.openapi.ui.DialogWrapper;
+import com.intellij.openapi.ui.TextFieldWithBrowseButton;
 import com.intellij.openapi.ui.ValidationInfo;
+import com.intellij.openapi.ui.popup.JBPopupFactory;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.psi.PsiClass;
-import com.intellij.ui.ComboboxSpeedSearch;
 import com.intellij.ui.EditorTextField;
 import com.intellij.ui.LanguageTextField;
 import com.intellij.ui.SimpleListCellRenderer;
@@ -26,6 +27,7 @@ import javax.swing.*;
 import javax.swing.table.DefaultTableModel;
 import java.awt.*;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
@@ -34,9 +36,23 @@ import java.util.Set;
 /** Popover for entering a new endpoint's shape; see {@link EndpointCodeGenerator} for what happens on OK. */
 public class AddEndpointDialog extends DialogWrapper {
 
-    private final List<PsiClass> proxies;
+    /**
+     * {@code toString()} is overridden (rather than relying on the record-generated one, which
+     * would include {@code proxy}) for the same reason {@code ApiStepPopups.ApiChoice} does:
+     * Swing's {@code JList} type-ahead-to-select calls {@code toString()} on list model items
+     * directly from the raw AWT key event, with no read action - {@code PsiClass.toString()} calls
+     * {@code getName()}, which requires one, and would throw
+     * {@code Read access is allowed from inside read-action only} on every keystroke otherwise.
+     */
+    private record ProxyChoice(@NotNull PsiClass proxy, @NotNull String displayText) {
+        @Override public String toString() { return displayText; }
+    }
 
-    private final JComboBox<PsiClass> proxyCombo;
+    private final List<PsiClass> proxies;
+    private final List<ProxyChoice> proxyChoices;
+
+    private final TextFieldWithBrowseButton proxyField = new TextFieldWithBrowseButton(e -> openProxyPicker());
+    private @Nullable PsiClass selectedProxy;
     private final JBTextField nameField = new JBTextField();
     private final JComboBox<String> methodCombo = new JComboBox<>(new String[]{"GET", "POST", "PUT", "PATCH", "DELETE"});
     private final JBTextField pathField = new JBTextField();
@@ -55,12 +71,21 @@ public class AddEndpointDialog extends DialogWrapper {
 
     public AddEndpointDialog(@NotNull Project project) {
         super(project, true);
-        this.proxies = ApiEndpointResolver.findAllProxyClasses(project);
-        this.proxyCombo = new JComboBox<>(proxies.toArray(new PsiClass[0]));
-        proxyCombo.setRenderer(SimpleListCellRenderer.create("(none)", AddEndpointDialog::proxyDisplayText));
-        // Lets the user type to filter/jump within the dropdown instead of only scrolling -
-        // matches the text the renderer already shows, not PsiClass's own toString().
-        ComboboxSpeedSearch.installSpeedSearch(proxyCombo, AddEndpointDialog::proxyDisplayText);
+        this.proxies = new ArrayList<>(ApiEndpointResolver.findAllProxyClasses(project));
+        this.proxies.sort(Comparator.comparing(AddEndpointDialog::proxyDisplayText, String.CASE_INSENSITIVE_ORDER));
+
+        this.proxyChoices = new ArrayList<>();
+        for (PsiClass proxy : proxies) {
+            proxyChoices.add(new ProxyChoice(proxy, proxyDisplayText(proxy)));
+        }
+
+        proxyField.setEditable(false);
+        if (proxyChoices.isEmpty()) {
+            proxyField.setText("(none)");
+            proxyField.setEnabled(false);
+        } else {
+            selectProxy(proxyChoices.get(0));
+        }
 
         this.bodyField = new LanguageTextField(JsonLanguage.INSTANCE, project, "", false);
         bodyField.setOneLineMode(false);
@@ -91,8 +116,8 @@ public class AddEndpointDialog extends DialogWrapper {
         if (proxies.isEmpty()) {
             builder.addComponent(new JBLabel("No classes extending AbstractApiProxy were found in this project."));
         }
-        builder.addLabeledComponent("Proxy:", proxyCombo)
-                .addTooltip("Only proxies with an existing endpoint enum are supported")
+        builder.addLabeledComponent("Proxy:", proxyField)
+                .addTooltip("Only proxies with an existing endpoint enum are supported - click to search")
                 .addLabeledComponent("Endpoint name:", nameField)
                 .addLabeledComponent("HTTP method:", methodCombo)
                 .addLabeledComponent("Path:", pathField)
@@ -132,6 +157,32 @@ public class AddEndpointDialog extends DialogWrapper {
         return notation != null ? proxy.getName() + " (" + notation + ")" : proxy.getName();
     }
 
+    /**
+     * Opens a real filterable popup (substring match, results narrow live as you type - see
+     * {@code ApiStepPopups} for the same, already-established pattern used by the {@code api:}/
+     * {@code auth:} shortcuts) instead of a plain combo box's speed search, which only lets you
+     * jump to the next prefix match without ever narrowing what's shown.
+     */
+    private void openProxyPicker() {
+        if (proxyChoices.isEmpty()) return;
+        JBPopupFactory.getInstance()
+                .createPopupChooserBuilder(proxyChoices)
+                .setTitle("Choose Proxy")
+                .setRenderer(SimpleListCellRenderer.create("", ProxyChoice::displayText))
+                .setNamerForFiltering(ProxyChoice::displayText)
+                .setItemChosenCallback(choice -> {
+                    selectProxy(choice);
+                    initValidation();
+                })
+                .createPopup()
+                .showUnderneathOf(proxyField);
+    }
+
+    private void selectProxy(@NotNull ProxyChoice choice) {
+        selectedProxy = choice.proxy();
+        proxyField.setText(choice.displayText());
+    }
+
     @Override
     protected @Nullable ValidationInfo doValidate() {
         try {
@@ -145,15 +196,15 @@ public class AddEndpointDialog extends DialogWrapper {
 
     private @Nullable ValidationInfo doValidateInternal() {
         if (proxies.isEmpty()) {
-            return new ValidationInfo("No classes extending AbstractApiProxy were found in this project.", proxyCombo);
+            return new ValidationInfo("No classes extending AbstractApiProxy were found in this project.", proxyField);
         }
-        PsiClass proxy = (PsiClass) proxyCombo.getSelectedItem();
+        PsiClass proxy = selectedProxy;
         if (proxy == null) {
-            return new ValidationInfo("Select a proxy.", proxyCombo);
+            return new ValidationInfo("Select a proxy.", proxyField);
         }
         if (EndpointCodeGenerator.findEndpointEnum(proxy) == null) {
             return new ValidationInfo(
-                    "Selected proxy has no endpoint enum yet — this action only adds to an existing one.", proxyCombo);
+                    "Selected proxy has no endpoint enum yet — this action only adds to an existing one.", proxyField);
         }
 
         String name = nameField.getText().trim();
@@ -220,7 +271,7 @@ public class AddEndpointDialog extends DialogWrapper {
 
     /** Assembles the spec from the current field values. Call only after {@link #showAndGet()} returns true. */
     public @NotNull NewEndpointSpec buildSpec() {
-        PsiClass proxy = (PsiClass) proxyCombo.getSelectedItem();
+        PsiClass proxy = selectedProxy;
         String name = nameField.getText().trim();
         String method = (String) methodCombo.getSelectedItem();
         String path = pathField.getText().trim();
