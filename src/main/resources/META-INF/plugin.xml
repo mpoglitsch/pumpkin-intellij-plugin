@@ -49,6 +49,8 @@
                 serviceImplementation="com.pumpkin.intellij.settings.PumpkinSettingsState"/>
         <projectService
                 serviceImplementation="com.pumpkin.intellij.repository.PumpkinProcessService"/>
+        <projectService
+                serviceImplementation="com.pumpkin.intellij.contextparam.PumpkinContextParameterService"/>
 
         <!-- ── Settings UI ── -->
         <projectConfigurable
@@ -90,6 +92,15 @@
         <completion.contributor
                 language="Gherkin"
                 implementationClass="com.pumpkin.intellij.completion.PumpkinTagCompletionContributor"/>
+        <!-- ── "%contextParameter%" autocomplete: typing % forces the completion popup open
+             (ContextParameterTypedHandler) and suggests every context-parameter name already
+             established before that point in the scenario (ContextParameterCompletionContributor,
+             backed by PumpkinContextParameterService) - see PumpkinContextParameterService's class
+             doc for the four sources it derives these from. ── -->
+        <completion.contributor
+                language="Gherkin"
+                implementationClass="com.pumpkin.intellij.contextparam.ContextParameterCompletionContributor"/>
+        <typedHandler implementationClass="com.pumpkin.intellij.contextparam.ContextParameterTypedHandler"/>
         <!-- ── "wf:123" shortcut: pressing Enter after typing this generates the workflow's
              default-scenario assertion steps directly into the document, similar in spirit to
              Java's "psvm" live template - see WorkflowShortcutEnterHandler's class doc ── -->

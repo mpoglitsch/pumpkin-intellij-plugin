@@ -52,14 +52,27 @@ public class PumpkinProcessCompletionContributor extends CompletionContributor {
             GherkinStep step = PsiTreeUtil.getParentOfType(position, GherkinStep.class, false);
             if (step == null) return;
 
-            // Extract the step name, removing the dummy identifier IntelliJ injects.
+            // Truncated at the dummy identifier IntelliJ injects at the caret, not just stripped -
+            // this must be "typed so far", not the whole step text with the marker deleted, since
+            // real invocations often have content after the caret too (e.g. editing an existing
+            // "Process: X with data" call site) that must NOT leak into the prefix match below.
             String stepName = step.getName();
             if (stepName == null) return;
-            stepName = stepName.replace(CompletionUtilCore.DUMMY_IDENTIFIER_TRIMMED, "").trim();
+            int dummyIndex = stepName.indexOf(CompletionUtilCore.DUMMY_IDENTIFIER_TRIMMED);
+            String beforeCursor = dummyIndex >= 0 ? stepName.substring(0, dummyIndex) : stepName;
 
-            if (!stepName.startsWith(PROCESS_PREFIX)) return;
+            if (!beforeCursor.startsWith(PROCESS_PREFIX)) return;
 
-            String typedProcessText = stepName.substring(PROCESS_PREFIX.length());
+            String typedProcessText = beforeCursor.substring(PROCESS_PREFIX.length());
+            // Once the caret has moved past the process name itself - into a "%variable%"
+            // placeholder or the "with/without data" marker - this isn't process-name-typing
+            // anymore, so this contributor must back off entirely (no stopHere() below) rather
+            // than swallow completion for the rest of the line, e.g.
+            // ContextParameterCompletionContributor's %contextParameter% suggestions.
+            if (typedProcessText.contains("%") || typedProcessText.contains(" with data")
+                    || typedProcessText.contains(" without data")) {
+                return;
+            }
 
             PumpkinProcessService service =
                     PumpkinProcessService.getInstance(position.getProject());

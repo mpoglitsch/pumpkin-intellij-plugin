@@ -9,6 +9,8 @@ import com.intellij.database.remote.jdbc.RemoteConnection;
 import com.intellij.database.remote.jdbc.RemotePreparedStatement;
 import com.intellij.database.remote.jdbc.RemoteResultSet;
 import com.intellij.database.util.GuardedRef;
+import com.intellij.openapi.progress.EmptyProgressIndicator;
+import com.intellij.openapi.progress.ProgressManager;
 import com.intellij.openapi.project.Project;
 import com.pumpkin.intellij.workflow.PumpkinDataSourceRef;
 import com.pumpkin.intellij.workflow.ScenarioMatch;
@@ -154,9 +156,28 @@ public final class WorkflowDataSourceBridgeImpl implements WorkflowDataSourceBri
                 .orElseThrow(() -> new SQLException(
                         "Datasource \"" + ref.displayName() + "\" is no longer configured in this project."));
 
-        return DatabaseConnectionManager.getInstance()
-                .build(project, dataSource)
-                .setRequestor(new ConnectionRequestor.Anonymous())
-                .createBlocking();
+        // createBlocking() internally requires an active ProgressIndicator/Job on the calling
+        // thread (it runs on a coroutine via runBlockingCancellable, which throws
+        // "There is no ProgressIndicator or Job in this thread" otherwise) - both callers of this
+        // bridge (the "wf:<id>" shortcut and the Workflow Assertion dialog) run on a plain pooled
+        // thread with neither, so this establishes one. A bare EmptyProgressIndicator (no visible
+        // UI, never cancelled) is enough - it doesn't change any caller-visible behavior, it only
+        // satisfies that internal precondition.
+        @SuppressWarnings("unchecked")
+        GuardedRef<DatabaseConnection>[] result = new GuardedRef[1];
+        SQLException[] error = new SQLException[1];
+        ProgressManager.getInstance().runProcess(() -> {
+            try {
+                result[0] = DatabaseConnectionManager.getInstance()
+                        .build(project, dataSource)
+                        .setRequestor(new ConnectionRequestor.Anonymous())
+                        .createBlocking();
+            } catch (SQLException e) {
+                error[0] = e;
+            }
+        }, new EmptyProgressIndicator());
+
+        if (error[0] != null) throw error[0];
+        return result[0];
     }
 }
