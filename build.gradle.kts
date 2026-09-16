@@ -33,7 +33,12 @@ dependencies {
             "*/ideaIU-${providers.gradleProperty("platformVersion").get()}/plugins/DatabaseTools/lib/modules/intellij.database.core.impl.jar",
             "*/ideaIU-${providers.gradleProperty("platformVersion").get()}/plugins/DatabaseTools/lib/modules/intellij.database.connectivity.jar",
             "*/ideaIU-${providers.gradleProperty("platformVersion").get()}/plugins/DatabaseTools/lib/modules/intellij.database.impl.jar",
-            "*/ideaIU-${providers.gradleProperty("platformVersion").get()}/plugins/DatabaseTools/lib/modules/intellij.database.jdbcConsole.jar"
+            "*/ideaIU-${providers.gradleProperty("platformVersion").get()}/plugins/DatabaseTools/lib/modules/intellij.database.jdbcConsole.jar",
+            // Supplies com.intellij.database.psi.DataSourceManager, the ultimate superclass behind
+            // LocalDataSourceManager (via AbstractDataSourceManager/BasicDataSourceManager) - without
+            // it javac can't fully resolve LocalDataSource/LocalDataSourceManager's own signatures,
+            // which surfaces as "class file ... not found" errors that look like the API is gone.
+            "*/ideaIU-${providers.gradleProperty("platformVersion").get()}/plugins/DatabaseTools/lib/modules/intellij.database.jar"
         )
     })
 }
