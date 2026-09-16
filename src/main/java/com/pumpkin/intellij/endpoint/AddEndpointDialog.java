@@ -6,6 +6,7 @@ import com.intellij.openapi.module.ModuleUtilCore;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.roots.ModuleRootManager;
 import com.intellij.openapi.ui.DialogWrapper;
+import com.intellij.openapi.ui.Messages;
 import com.intellij.openapi.ui.TextFieldWithBrowseButton;
 import com.intellij.openapi.ui.ValidationInfo;
 import com.intellij.openapi.ui.popup.JBPopupFactory;
@@ -48,6 +49,7 @@ public class AddEndpointDialog extends DialogWrapper {
         @Override public String toString() { return displayText; }
     }
 
+    private final Project project;
     private final List<PsiClass> proxies;
     private final List<ProxyChoice> proxyChoices;
 
@@ -70,7 +72,12 @@ public class AddEndpointDialog extends DialogWrapper {
             new JComboBox<>(HttpStatusOption.ALL.toArray(new HttpStatusOption[0]));
 
     public AddEndpointDialog(@NotNull Project project) {
-        super(project, true);
+        // MODELESS so the user can still click into the editor (e.g. to check an existing path or
+        // parameter name) while this dialog stays open - see doOKAction() below for why generation
+        // moves here instead of the caller (a modeless dialog's show() doesn't block, so
+        // showAndGet() can no longer be used to gate "generate after close").
+        super(project, true, IdeModalityType.MODELESS);
+        this.project = project;
         this.proxies = new ArrayList<>(ApiEndpointResolver.findAllProxyClasses(project));
         this.proxies.sort(Comparator.comparing(AddEndpointDialog::proxyDisplayText, String.CASE_INSENSITIVE_ORDER));
 
@@ -269,8 +276,28 @@ public class AddEndpointDialog extends DialogWrapper {
         return false;
     }
 
-    /** Assembles the spec from the current field values. Call only after {@link #showAndGet()} returns true. */
-    public @NotNull NewEndpointSpec buildSpec() {
+    /**
+     * Generation happens here, on OK, rather than in the caller after {@code showAndGet()} (see
+     * the constructor's doc comment for why a modeless dialog rules that pattern out). On failure
+     * the dialog stays open (no {@code super.doOKAction()}) so the user can fix the problem and
+     * retry without re-entering everything.
+     */
+    @Override
+    protected void doOKAction() {
+        NewEndpointSpec spec = buildSpec();
+        try {
+            EndpointCodeGenerator.generate(project, spec);
+            Messages.showInfoMessage(project,
+                    "Added " + spec.endpointName() + " to " + spec.proxyClass().getName() + ".",
+                    "Add API Endpoint");
+            super.doOKAction();
+        } catch (RuntimeException ex) {
+            Messages.showErrorDialog(project, String.valueOf(ex.getMessage()), "Add API Endpoint Failed");
+        }
+    }
+
+    /** Assembles the spec from the current field values. */
+    private @NotNull NewEndpointSpec buildSpec() {
         PsiClass proxy = selectedProxy;
         String name = nameField.getText().trim();
         String method = (String) methodCombo.getSelectedItem();

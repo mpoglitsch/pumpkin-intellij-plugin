@@ -2,6 +2,7 @@ package com.pumpkin.intellij.proxy;
 
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.ui.DialogWrapper;
+import com.intellij.openapi.ui.Messages;
 import com.intellij.openapi.ui.ValidationInfo;
 import com.intellij.psi.JavaPsiFacade;
 import com.intellij.psi.PsiClass;
@@ -17,6 +18,7 @@ import org.jetbrains.annotations.Nullable;
 import javax.swing.JComboBox;
 import javax.swing.JComponent;
 import javax.swing.JPanel;
+import java.awt.BorderLayout;
 import java.awt.CardLayout;
 import java.awt.Dimension;
 import java.awt.GridBagConstraints;
@@ -26,15 +28,24 @@ import java.util.Map;
 /** Popover for entering a new API proxy's name and authentication method; see {@link ApiProxyCodeGenerator} for what happens on OK. */
 public class AddApiProxyDialog extends DialogWrapper {
 
+    /** One field's value entry: the text field for the raw name, plus the combo picking its {@link FieldValueSource}. */
+    private record FieldRow(@NotNull JBTextField valueField, @NotNull JComboBox<FieldValueSource> sourceCombo) {
+    }
+
     private final Project project;
 
     private final JBTextField nameField = new JBTextField();
     private final JComboBox<AuthenticationMethod> authCombo = new JComboBox<>(AuthenticationMethod.values());
     private final JPanel authFieldsPanel = new JPanel(new CardLayout());
-    private final Map<AuthenticationMethod, Map<String, JBTextField>> fieldsByMethod = new LinkedHashMap<>();
+    private final Map<AuthenticationMethod, Map<String, FieldRow>> fieldsByMethod = new LinkedHashMap<>();
 
     public AddApiProxyDialog(@NotNull Project project) {
-        super(project, true);
+        // MODELESS so the user can still click into the editor (e.g. to copy a context-parameter
+        // or environment-variable name) while this dialog stays open, instead of having to close
+        // it first - see the doOKAction() override below for why generation moves here instead of
+        // staying in the caller (a modeless dialog's show() doesn't block, so showAndGet() can no
+        // longer be used to gate "generate after close").
+        super(project, true, IdeModalityType.MODELESS);
         this.project = project;
 
         nameField.getEmptyText().setText("This Is the API");
@@ -49,11 +60,17 @@ public class AddApiProxyDialog extends DialogWrapper {
     private void buildAuthFieldsPanel() {
         for (AuthenticationMethod method : AuthenticationMethod.values()) {
             FormBuilder builder = FormBuilder.createFormBuilder();
-            Map<String, JBTextField> fields = new LinkedHashMap<>();
+            Map<String, FieldRow> fields = new LinkedHashMap<>();
             for (AuthenticationMethod.Field field : method.fields()) {
                 JBTextField textField = new JBTextField();
-                fields.put(field.key(), textField);
-                builder.addLabeledComponent(field.label() + ":", textField);
+                JComboBox<FieldValueSource> sourceCombo = new JComboBox<>(FieldValueSource.values());
+
+                JPanel row = new JPanel(new BorderLayout(4, 0));
+                row.add(textField, BorderLayout.CENTER);
+                row.add(sourceCombo, BorderLayout.EAST);
+
+                fields.put(field.key(), new FieldRow(textField, sourceCombo));
+                builder.addLabeledComponent(field.label() + ":", row);
             }
             fieldsByMethod.put(method, fields);
             authFieldsPanel.add(builder.getPanel(), method.name());
@@ -89,7 +106,10 @@ public class AddApiProxyDialog extends DialogWrapper {
                 .addComponent(authFieldsPanel);
 
         JPanel panel = builder.getPanel();
-        panel.setPreferredSize(new Dimension(480, panel.getPreferredSize().height));
+        // Wider than a plain text-only dialog needs - each auth field's row is a text field plus a
+        // source combo (see buildAuthFieldsPanel), and the combo's own fixed width was eating into
+        // the text field's share of a narrower panel.
+        panel.setPreferredSize(new Dimension(620, panel.getPreferredSize().height));
         return panel;
     }
 
@@ -132,7 +152,8 @@ public class AddApiProxyDialog extends DialogWrapper {
 
         AuthenticationMethod method = selectedMethod();
         for (AuthenticationMethod.Field field : method.fields()) {
-            JBTextField textField = fieldsByMethod.get(method).get(field.key());
+            if (field.optional()) continue;
+            JBTextField textField = fieldsByMethod.get(method).get(field.key()).valueField();
             if (textField.getText().trim().isEmpty()) {
                 return new ValidationInfo(field.label() + " is required.", textField);
             }
@@ -141,16 +162,36 @@ public class AddApiProxyDialog extends DialogWrapper {
         return null;
     }
 
-    /** Assembles the spec from the current field values. Call only after {@link #showAndGet()} returns true. */
-    public @NotNull NewApiProxySpec buildSpec() {
+    /** Assembles the spec from the current field values. */
+    private @NotNull NewApiProxySpec buildSpec() {
         String name = nameField.getText().trim();
         AuthenticationMethod method = selectedMethod();
 
-        Map<String, String> values = new LinkedHashMap<>();
+        Map<String, AuthFieldValue> values = new LinkedHashMap<>();
         for (AuthenticationMethod.Field field : method.fields()) {
-            values.put(field.key(), fieldsByMethod.get(method).get(field.key()).getText().trim());
+            FieldRow row = fieldsByMethod.get(method).get(field.key());
+            FieldValueSource source = (FieldValueSource) row.sourceCombo().getSelectedItem();
+            values.put(field.key(), new AuthFieldValue(
+                    row.valueField().getText().trim(),
+                    source != null ? source : FieldValueSource.CONTEXT_PARAMETER));
         }
 
         return new NewApiProxySpec(name, method, values);
+    }
+
+    /**
+     * Generation happens here, on OK, rather than in the caller after {@code showAndGet()}
+     * (see the constructor's doc comment for why a modeless dialog rules that pattern out). On
+     * failure the dialog stays open (no {@code super.doOKAction()}) so the user can fix the
+     * problem and retry without re-entering everything.
+     */
+    @Override
+    protected void doOKAction() {
+        try {
+            ApiProxyCodeGenerator.generate(project, buildSpec());
+            super.doOKAction();
+        } catch (RuntimeException ex) {
+            Messages.showErrorDialog(project, String.valueOf(ex.getMessage()), "Add API Proxy Failed");
+        }
     }
 }

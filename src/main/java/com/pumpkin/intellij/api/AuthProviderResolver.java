@@ -17,12 +17,13 @@ import java.util.List;
  * shortcut (see {@link AuthStepTriggerHandler}), and its display name.
  *
  * <p>Real providers never implement {@code ApiAuthenticationProvider} directly - they extend one
- * of its three abstract base classes, {@code PasswordAuthenticationProvider}, {@code
- * BasicAuthenticationProvider}, or {@code ClientCredentialsApiAuthenticationProvider} (confirmed
- * spelling - matches what {@code ApiProxyCodeGenerator} already emits for the same class). So
- * discovery searches for direct subclasses of each of the three, via {@link
- * ApiEndpointResolver#findDirectSubclasses}, the same "extends"-search algorithm {@code
- * ApiEndpointResolver} already uses to find {@code AbstractApiProxy} subclasses.
+ * of its four abstract base classes, {@code PasswordAuthenticationProvider}, {@code
+ * BasicAuthenticationProvider}, {@code ClientCredentialsApiAuthenticationProvider}, or {@code
+ * AuthorizationCodeApiAuthenticationProvider} (confirmed spelling - matches what {@code
+ * ApiProxyCodeGenerator} already emits for the same class). So discovery searches for direct
+ * subclasses of each of the four, via {@link ApiEndpointResolver#findDirectSubclasses}, the same
+ * "extends"-search algorithm {@code ApiEndpointResolver} already uses to find {@code
+ * AbstractApiProxy} subclasses.
  */
 final class AuthProviderResolver {
 
@@ -32,9 +33,11 @@ final class AuthProviderResolver {
             "at.compax.rp.test.services.api.providers.BasicAuthenticationProvider";
     private static final String CLIENT_CREDENTIALS_PROVIDER_FQN =
             "at.compax.rp.test.services.api.providers.ClientCredentialsApiAuthenticationProvider";
+    private static final String AUTHORIZATION_CODE_PROVIDER_FQN =
+            "at.compax.rp.test.services.api.providers.AuthorizationCodeApiAuthenticationProvider";
 
     private static final String[] PROVIDER_BASE_FQNS = {
-            PASSWORD_PROVIDER_FQN, BASIC_PROVIDER_FQN, CLIENT_CREDENTIALS_PROVIDER_FQN
+            PASSWORD_PROVIDER_FQN, BASIC_PROVIDER_FQN, CLIENT_CREDENTIALS_PROVIDER_FQN, AUTHORIZATION_CODE_PROVIDER_FQN
     };
 
     private AuthProviderResolver() {}

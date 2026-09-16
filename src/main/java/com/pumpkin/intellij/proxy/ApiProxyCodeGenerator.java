@@ -23,6 +23,7 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
@@ -40,6 +41,7 @@ public final class ApiProxyCodeGenerator {
 
     private static final String PROXY_PACKAGE = "at.compax.rp.test.services.api.proxy";
     private static final String PROVIDER_IMPL_PACKAGE = "at.compax.rp.test.services.api.providers.impl";
+    private static final String GENERIC_CONFIGURATION_FQN = "at.compax.foundation.ta.util.configuration.GenericConfiguration";
 
     private ApiProxyCodeGenerator() {}
 
@@ -236,18 +238,38 @@ public final class ApiProxyCodeGenerator {
 
     /** Mirrors the exact authentication-provider skeleton for {@code method} (never called for {@link AuthenticationMethod#NONE}). */
     static @NotNull String buildProviderSource(@NotNull String base, @NotNull AuthenticationMethod method,
-                                               @NotNull Map<String, String> fieldValues) {
+                                               @NotNull Map<String, AuthFieldValue> fieldValues) {
         String className = base + "AuthenticationProvider";
         String parentClass = switch (method) {
             case BASIC -> "BasicAuthenticationProvider";
             case CLIENT_CREDENTIALS -> "ClientCredentialsApiAuthenticationProvider";
             case PASSWORD -> "PasswordAuthenticationProvider";
+            case AUTHORIZATION_CODE -> "AuthorizationCodeApiAuthenticationProvider";
             case NONE -> throw new IllegalArgumentException("NONE has no authentication provider.");
         };
 
+        // An optional field left blank isn't overridden at all - the abstract base class's own
+        // default implementation applies - so it contributes neither an import nor a getter.
+        List<AuthenticationMethod.Field> fieldsToEmit = new ArrayList<>();
+        for (AuthenticationMethod.Field field : method.fields()) {
+            AuthFieldValue fieldValue = fieldValues.get(field.key());
+            if (field.optional() && (fieldValue == null || fieldValue.value().isBlank())) continue;
+            fieldsToEmit.add(field);
+        }
+
+        boolean usesContextParameter = fieldsToEmit.stream()
+                .anyMatch(f -> sourceOf(fieldValues, f) == FieldValueSource.CONTEXT_PARAMETER);
+        boolean usesEnvironmentVariable = fieldsToEmit.stream()
+                .anyMatch(f -> sourceOf(fieldValues, f) == FieldValueSource.ENVIRONMENT_VARIABLE);
+
         StringBuilder sb = new StringBuilder();
         sb.append("package ").append(PROVIDER_IMPL_PACKAGE).append(";\n\n");
-        sb.append("import at.compax.rp.test.context.RPTAContext;\n");
+        if (usesContextParameter) {
+            sb.append("import at.compax.rp.test.context.RPTAContext;\n");
+        }
+        if (usesEnvironmentVariable) {
+            sb.append("import ").append(GENERIC_CONFIGURATION_FQN).append(";\n");
+        }
         sb.append("import at.compax.rp.test.services.api.providers.").append(parentClass).append(";\n");
         sb.append("import org.springframework.stereotype.Component;\n\n");
         sb.append("@Component\n");
@@ -258,17 +280,29 @@ public final class ApiProxyCodeGenerator {
         sb.append("    return \"").append(base).append("Authentication\";\n");
         sb.append("  }\n");
 
-        for (AuthenticationMethod.Field field : method.fields()) {
+        for (AuthenticationMethod.Field field : fieldsToEmit) {
             String getterName = "get" + Character.toUpperCase(field.key().charAt(0)) + field.key().substring(1);
-            String value = fieldValues.getOrDefault(field.key(), "");
+            AuthFieldValue fieldValue = fieldValues.getOrDefault(
+                    field.key(), new AuthFieldValue("", FieldValueSource.CONTEXT_PARAMETER));
+            String value = escapeJavaString(fieldValue.value());
             sb.append("\n  @Override\n");
             sb.append("  public String ").append(getterName).append("() {\n");
-            sb.append("    return RPTAContext.getInstance().getApiContext().getContextParameters()\n");
-            sb.append("        .get(\"").append(escapeJavaString(value)).append("\");\n");
+            if (fieldValue.source() == FieldValueSource.ENVIRONMENT_VARIABLE) {
+                sb.append("    return GenericConfiguration.getProperty(\"").append(value).append("\");\n");
+            } else {
+                sb.append("    return RPTAContext.getInstance().getApiContext().getContextParameters()\n");
+                sb.append("        .get(\"").append(value).append("\");\n");
+            }
             sb.append("  }\n");
         }
         sb.append("}\n");
         return sb.toString();
+    }
+
+    private static @NotNull FieldValueSource sourceOf(@NotNull Map<String, AuthFieldValue> fieldValues,
+                                                       @NotNull AuthenticationMethod.Field field) {
+        AuthFieldValue fieldValue = fieldValues.get(field.key());
+        return fieldValue != null ? fieldValue.source() : FieldValueSource.CONTEXT_PARAMETER;
     }
 
     private static @NotNull String escapeJavaString(@NotNull String value) {

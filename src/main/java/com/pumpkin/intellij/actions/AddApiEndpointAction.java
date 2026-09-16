@@ -9,8 +9,6 @@ import com.intellij.openapi.project.Project;
 import com.intellij.openapi.ui.Messages;
 import com.intellij.psi.PsiFile;
 import com.pumpkin.intellij.endpoint.AddEndpointDialog;
-import com.pumpkin.intellij.endpoint.EndpointCodeGenerator;
-import com.pumpkin.intellij.endpoint.NewEndpointSpec;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.plugins.cucumber.psi.GherkinFile;
 
@@ -37,17 +35,8 @@ public class AddApiEndpointAction extends AnAction {
             return;
         }
 
-        AddEndpointDialog dialog = new AddEndpointDialog(project);
-        if (!dialog.showAndGet()) return;
-
-        NewEndpointSpec spec = dialog.buildSpec();
-        try {
-            EndpointCodeGenerator.generate(project, spec);
-            Messages.showInfoMessage(project,
-                    "Added " + spec.endpointName() + " to " + spec.proxyClass().getName() + ".",
-                    "Add API Endpoint");
-        } catch (RuntimeException ex) {
-            Messages.showErrorDialog(project, String.valueOf(ex.getMessage()), "Add API Endpoint Failed");
-        }
+        // Modeless - see AddEndpointDialog's constructor doc - so it's shown, not shown-and-waited-
+        // on; generation happens inside the dialog's own doOKAction() instead of here.
+        new AddEndpointDialog(project).show();
     }
 }

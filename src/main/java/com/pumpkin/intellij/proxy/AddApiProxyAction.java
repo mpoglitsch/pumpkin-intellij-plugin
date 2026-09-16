@@ -34,14 +34,8 @@ public class AddApiProxyAction extends AnAction {
             return;
         }
 
-        AddApiProxyDialog dialog = new AddApiProxyDialog(project);
-        if (!dialog.showAndGet()) return;
-
-        NewApiProxySpec spec = dialog.buildSpec();
-        try {
-            ApiProxyCodeGenerator.generate(project, spec);
-        } catch (RuntimeException ex) {
-            Messages.showErrorDialog(project, String.valueOf(ex.getMessage()), "Add API Proxy Failed");
-        }
+        // Modeless - see AddApiProxyDialog's constructor doc - so it's shown, not shown-and-waited-
+        // on; generation happens inside the dialog's own doOKAction() instead of here.
+        new AddApiProxyDialog(project).show();
     }
 }

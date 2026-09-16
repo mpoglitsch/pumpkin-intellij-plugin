@@ -14,6 +14,6 @@ import java.util.Map;
 public record NewApiProxySpec(
         @NotNull String proxyName,
         @NotNull AuthenticationMethod authenticationMethod,
-        @NotNull Map<String, String> fieldValues
+        @NotNull Map<String, AuthFieldValue> fieldValues
 ) {
 }

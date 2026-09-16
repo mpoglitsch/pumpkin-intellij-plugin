@@ -1,3 +1,5 @@
+import org.gradle.jvm.toolchain.JavaLanguageVersion
+
 plugins {
     id("java")
     id("org.jetbrains.intellij") version "1.17.4"
@@ -11,8 +13,8 @@ repositories {
 }
 
 dependencies {
-    compileOnly("org.projectlombok:lombok:1.18.32")
-    annotationProcessor("org.projectlombok:lombok:1.18.32")
+    compileOnly("org.projectlombok:lombok:1.18.38")
+    annotationProcessor("org.projectlombok:lombok:1.18.38")
 
     // Gradle IntelliJ Plugin 1.x only puts com.intellij.database's top-level jars on the
     // compileOnly classpath (database-plugin.jar, database-plugin-frontend.jar) - it predates
@@ -55,6 +57,14 @@ intellij {
 
 tasks {
     withType<JavaCompile> {
+        // IU-262.10315.125's platform jars are compiled with class file version 69 (Java 25) -
+        // javac needs a JDK at least that new just to *read* them off the compileOnly classpath,
+        // regardless of this project's own targetCompatibility below. This forks javac on a JDK 25
+        // toolchain Gradle locates itself, without requiring the Gradle daemon's own JVM to be 25
+        // (Gradle 8.6, this project's wrapper version, can't run its daemon on JDK 25 anyway).
+        javaCompiler.set(project.javaToolchains.compilerFor {
+            languageVersion.set(JavaLanguageVersion.of(25))
+        })
         sourceCompatibility = "17"
         targetCompatibility = "17"
         options.encoding = "UTF-8"
