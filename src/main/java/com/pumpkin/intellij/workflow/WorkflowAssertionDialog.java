@@ -6,12 +6,12 @@ import com.intellij.openapi.ide.CopyPasteManager;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.ui.DialogWrapper;
 import com.intellij.ui.JBColor;
-import com.intellij.ui.LanguageTextField;
 import com.intellij.ui.SimpleListCellRenderer;
 import com.intellij.ui.components.JBLabel;
 import com.intellij.ui.components.JBTextField;
 import com.intellij.util.ui.FormBuilder;
 import com.pumpkin.intellij.settings.PumpkinSettingsState;
+import com.pumpkin.intellij.ui.ScrollableLanguageTextField;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.jetbrains.plugins.cucumber.psi.GherkinLanguage;
@@ -60,7 +60,7 @@ public class WorkflowAssertionDialog extends DialogWrapper {
     private final JButton generateButton = new JButton("Generate");
     private final JComboBox<ScenarioMatch> scenarioCombo = new JComboBox<>();
     private final JBLabel errorLabel = new JBLabel();
-    private final LanguageTextField outputField;
+    private final ScrollableLanguageTextField outputField;
     private final JButton copyButton = new JButton("Copy");
 
     /** Guards against reacting to scenarioCombo being repopulated programmatically. */
@@ -71,8 +71,7 @@ public class WorkflowAssertionDialog extends DialogWrapper {
         this.project = project;
         this.bridge = bridge;
 
-        this.outputField = new LanguageTextField(GherkinLanguage.INSTANCE, project, "", false);
-        outputField.setOneLineMode(false);
+        this.outputField = new ScrollableLanguageTextField(GherkinLanguage.INSTANCE, project, "");
         outputField.setPreferredSize(new Dimension(560, 220));
         outputField.setViewer(true);
 

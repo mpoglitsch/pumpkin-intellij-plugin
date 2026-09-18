@@ -7,6 +7,7 @@ import com.intellij.psi.PsiClassType;
 import com.intellij.psi.PsiCodeBlock;
 import com.intellij.psi.PsiElement;
 import com.intellij.psi.PsiExpression;
+import com.intellij.psi.PsiExpressionList;
 import com.intellij.psi.PsiField;
 import com.intellij.psi.PsiMethod;
 import com.intellij.psi.PsiMethodCallExpression;
@@ -14,6 +15,7 @@ import com.intellij.psi.PsiReferenceExpression;
 import com.intellij.psi.PsiStatement;
 import com.intellij.psi.PsiSwitchBlock;
 import com.intellij.psi.PsiSwitchLabelStatement;
+import com.intellij.psi.PsiSwitchLabelStatementBase;
 import com.intellij.psi.PsiSwitchLabeledRuleStatement;
 import com.intellij.psi.search.GlobalSearchScope;
 import com.intellij.psi.util.InheritanceUtil;
@@ -22,7 +24,9 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Set;
 
 /**
  * Finds the context-parameter names an API call's PostProcessor writes via {@code
@@ -41,8 +45,8 @@ import java.util.List;
  */
 public final class PumpkinPostprocessorResolver {
 
-    private static final String DISPATCHER_FQN = "at.compax.rp.test.services.api.ApiPostprocessorDispatcher";
-    private static final String ABSTRACT_POSTPROCESSOR_FQN =
+    public static final String DISPATCHER_FQN = "at.compax.rp.test.services.api.ApiPostprocessorDispatcher";
+    public static final String ABSTRACT_POSTPROCESSOR_FQN =
             "at.compax.rp.test.services.api.postprocess.AbstractApiPostProcessor";
 
     private PumpkinPostprocessorResolver() {}
@@ -83,6 +87,64 @@ public final class PumpkinPostprocessorResolver {
             }
         }
         return result;
+    }
+
+    /**
+     * Returns the {@code AbstractApiPostProcessor} subclass already handling {@code
+     * apiNotationConstantName} - a thin public wrapper around the dispatcher lookup + {@link
+     * #findPostProcessorClass}, for {@code AddPostProcessorDialog}/{@code
+     * PostProcessorCodeGenerator} to reuse instead of re-implementing the same dispatcher-walk.
+     * Returns {@code null} if there's no dispatcher entry yet for this API - meaning a whole new
+     * PostProcessor (and dispatcher wiring) needs to be generated, not just a new {@code case}.
+     */
+    @Nullable
+    public static PsiClass findExistingPostProcessorClass(@NotNull Project project,
+                                                           @NotNull String apiNotationConstantName) {
+        PsiClass dispatcher = JavaPsiFacade.getInstance(project)
+                .findClass(DISPATCHER_FQN, GlobalSearchScope.allScope(project));
+        return dispatcher == null ? null : findPostProcessorClass(dispatcher, apiNotationConstantName);
+    }
+
+    /**
+     * Every endpoint enum-constant name that already has a {@code case ...} label in the
+     * PostProcessor handling {@code apiNotationConstantName}'s {@code postProcess} switch - empty
+     * if no dispatcher entry/PostProcessor exists yet for this API at all (meaning every endpoint
+     * on that proxy is still available), used by {@code AddPostProcessorDialog} to only offer
+     * endpoints that don't already have a case.
+     *
+     * <p>Deliberately reads only the switch's own case <em>labels</em> (via {@link
+     * PsiSwitchLabelStatementBase#getCaseValues()}), not every {@link PsiReferenceExpression}
+     * anywhere in each case's body the way {@link #resolveWrittenParams} does - a case body can
+     * freely reference other enum constants (e.g. as part of a comparison), which would otherwise
+     * be miscounted as "this endpoint already has a case".
+     */
+    @NotNull
+    public static Set<String> findHandledEndpointNames(@NotNull Project project,
+                                                        @NotNull String apiNotationConstantName) {
+        PsiClass postProcessorClass = findExistingPostProcessorClass(project, apiNotationConstantName);
+        if (postProcessorClass == null) return Set.of();
+
+        PsiMethod[] postProcessMethods = postProcessorClass.findMethodsByName("postProcess", false);
+        if (postProcessMethods.length == 0) return Set.of();
+
+        PsiCodeBlock body = postProcessMethods[0].getBody();
+        PsiSwitchBlock switchBlock = body == null ? null : PsiTreeUtil.findChildOfType(body, PsiSwitchBlock.class);
+        PsiCodeBlock switchBody = switchBlock == null ? null : switchBlock.getBody();
+        if (switchBody == null) return Set.of();
+
+        Set<String> handled = new LinkedHashSet<>();
+        for (PsiStatement stmt : switchBody.getStatements()) {
+            if (!(stmt instanceof PsiSwitchLabelStatementBase label) || label.isDefaultCase()) continue;
+            PsiExpressionList caseValues = label.getCaseValues();
+            if (caseValues == null) continue;
+            for (PsiExpression expr : caseValues.getExpressions()) {
+                if (expr instanceof PsiReferenceExpression ref) {
+                    String name = ref.getReferenceName();
+                    if (name != null) handled.add(name);
+                }
+            }
+        }
+        return handled;
     }
 
     /**

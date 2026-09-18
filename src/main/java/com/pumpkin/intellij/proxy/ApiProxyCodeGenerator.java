@@ -75,10 +75,49 @@ public final class ApiProxyCodeGenerator {
             String proxySource = buildProxySource(constantName, base, hasAuth, kebabName);
             PsiFile proxyFile = createJavaFile(project, PROXY_PACKAGE, base + "Proxy", proxySource, anchorProxy);
 
+            if (!spec.environmentBaseUrls().isEmpty()) {
+                // Matches buildProxySource's own "baseUrlProperty" field value exactly - see its
+                // "@Getter private String baseUrlProperty = ..." line below.
+                writeEnvironmentBaseUrls(project, kebabName + ".url", spec.environmentBaseUrls());
+            }
+
             if (proxyFile != null && proxyFile.getVirtualFile() != null) {
                 FileEditorManager.getInstance(project).openFile(proxyFile.getVirtualFile(), true);
             }
         }, anchorProxy.getContainingFile());
+    }
+
+    // -------------------------------------------------------------------------
+    // Per-environment base URL properties
+    // -------------------------------------------------------------------------
+
+    /**
+     * Appends {@code <propertyKey>=<baseUrl>} to each named environment's own {@code
+     * testsuite_configuration_<environment>.properties} file - re-resolved fresh here rather than
+     * reusing whatever {@link EnvironmentResolver} found when the dialog opened, in case the
+     * project changed in the meantime.
+     */
+    private static void writeEnvironmentBaseUrls(@NotNull Project project, @NotNull String propertyKey,
+                                                 @NotNull List<EnvironmentBaseUrl> environmentBaseUrls) {
+        Map<String, VirtualFile> environmentFiles = EnvironmentResolver.findEnvironmentFiles(project);
+        for (EnvironmentBaseUrl entry : environmentBaseUrls) {
+            VirtualFile file = environmentFiles.get(entry.environment());
+            if (file == null) {
+                throw new IllegalStateException(
+                        "Could not find testsuite_configuration_" + entry.environment() + ".properties anymore.");
+            }
+            appendProperty(file, propertyKey, entry.baseUrl());
+        }
+    }
+
+    private static void appendProperty(@NotNull VirtualFile file, @NotNull String key, @NotNull String value) {
+        try {
+            String content = VfsUtil.loadText(file);
+            String separator = content.isEmpty() || content.endsWith("\n") ? "" : "\n";
+            VfsUtil.saveText(file, content + separator + key + "=" + value + "\n");
+        } catch (IOException e) {
+            throw new RuntimeException("Could not update " + file.getName() + ": " + e.getMessage(), e);
+        }
     }
 
     // -------------------------------------------------------------------------

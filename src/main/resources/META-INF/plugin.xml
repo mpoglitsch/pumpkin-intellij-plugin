@@ -72,6 +72,13 @@
                 order="after org.jetbrains.plugins.cucumber.psi.annotator.GherkinAnnotator"
                 implementationClass="com.pumpkin.intellij.highlighting.PumpkinProcessAnnotator"/>
 
+        <!-- ── Highlights the table/column actually under test inside a DB-step header cell's
+             join(...)/rejoin(...) spec - see DbStepReferenceAnnotator's class doc ── -->
+        <annotator
+                language="Gherkin"
+                order="after org.jetbrains.plugins.cucumber.psi.annotator.GherkinAnnotator"
+                implementationClass="com.pumpkin.intellij.dbstep.DbStepReferenceAnnotator"/>
+
         <!-- ── Warns on a generated "auth:" step whose API's proxy overrides
              getApiAuthenticationProvider() itself, bypassing step-selected providers entirely -
              see AuthStepAnnotator's class doc ── -->
@@ -101,6 +108,22 @@
                 language="Gherkin"
                 implementationClass="com.pumpkin.intellij.contextparam.ContextParameterCompletionContributor"/>
         <typedHandler implementationClass="com.pumpkin.intellij.contextparam.ContextParameterTypedHandler"/>
+        <!-- ── Schema-driven autocomplete for "these values are present in <table>" DB steps -
+             table names, column names, and join(...)/saveToContext(...) template chaining, backed
+             by the same WorkflowDataSourceBridge seam the Workflow Assertion feature uses. See
+             DbStepCompletionContributor's class doc. ── -->
+        <completion.contributor
+                language="Gherkin"
+                implementationClass="com.pumpkin.intellij.dbstep.DbStepCompletionContributor"/>
+        <!-- ── Pressing Enter after a DB "present in <table>" step with no table below it yet
+             inserts a single-column header+blank-row skeleton - see DbStepEnterHandler's class doc,
+             mirrors StoreContextValuesEnterHandler's own shape for a different step. ── -->
+        <enterHandlerDelegate implementation="com.pumpkin.intellij.dbstep.DbStepEnterHandler"/>
+        <!-- ── "db:" shortcut: typing this (optionally after a step keyword) opens a filterable
+             popup of every table in the configured datasource's schema - selecting one generates
+             the whole "these values are present in <table>" step plus its table skeleton, caret in
+             the first header cell. See DbStepTriggerHandler's class doc. ── -->
+        <typedHandler implementationClass="com.pumpkin.intellij.dbstep.DbStepTriggerHandler"/>
         <!-- ── "wf:123" shortcut: pressing Enter after typing this generates the workflow's
              default-scenario assertion steps directly into the document, similar in spirit to
              Java's "psvm" live template - see WorkflowShortcutEnterHandler's class doc ── -->
@@ -215,6 +238,10 @@
                             class="com.pumpkin.intellij.proxy.AddApiProxyAction"
                             text="Add API Proxy..."
                             description="Generate a new API proxy class, ApiNotation constant, and (if needed) authentication provider"/>
+                    <action id="Pumpkin.AddPostProcessor"
+                            class="com.pumpkin.intellij.api.postprocessor.AddPostProcessorAction"
+                            text="Add PostProcessor..."
+                            description="Generate a PostProcessor case (or a whole new PostProcessor) for an API endpoint"/>
                 </group>
                 <group id="Pumpkin.Generator" text="Generator" popup="true">
                     <action id="Pumpkin.GenerateWorkflowAssertion"

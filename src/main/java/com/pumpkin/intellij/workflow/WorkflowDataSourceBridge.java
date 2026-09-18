@@ -3,6 +3,7 @@ package com.pumpkin.intellij.workflow;
 import com.intellij.openapi.extensions.ExtensionPointName;
 import com.intellij.openapi.project.Project;
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
 import java.sql.SQLException;
 import java.util.List;
@@ -41,4 +42,36 @@ public interface WorkflowDataSourceBridge {
      */
     @NotNull List<WorkflowItemRow> findWorkflowItems(@NotNull Project project,
             @NotNull PumpkinDataSourceRef dataSource, long workflowId, long scenarioId) throws SQLException;
+
+    /** Every table name in {@code dataSource}'s introspected schema, for the DB-step autocomplete. */
+    @NotNull List<String> listTables(@NotNull Project project, @NotNull PumpkinDataSourceRef dataSource);
+
+    /**
+     * Every column of {@code tableName} (case-insensitive) in {@code dataSource}'s introspected
+     * schema, or empty if the table can't be found. Schema-only - no live connection is opened for
+     * this (see {@code WorkflowDataSourceBridgeImpl}'s own doc).
+     */
+    @NotNull List<ColumnInfo> listColumns(@NotNull Project project, @NotNull PumpkinDataSourceRef dataSource,
+                                          @NotNull String tableName);
+
+    /**
+     * Every {@code (table, column)} pair anywhere in the schema whose column has a foreign key
+     * pointing at {@code targetTable.targetColumn} - the reverse direction of {@link ColumnInfo}'s
+     * own (outgoing) foreign-key info, for the {@code rejoin(...)} DB-step completion (find every
+     * table that references *this* table, rather than what *this* table references).
+     */
+    @NotNull List<ReverseForeignKey> findColumnsReferencing(@NotNull Project project,
+            @NotNull PumpkinDataSourceRef dataSource, @NotNull String targetTable, @NotNull String targetColumn);
+
+    /**
+     * One column of a table, plus - if it's a foreign key - the single table/column it references.
+     * Composite foreign keys resolve to their first source/target column pair only, which is all
+     * the {@code join(...)}-completion chaining needs.
+     */
+    record ColumnInfo(@NotNull String name, @Nullable String foreignKeyTable, @Nullable String foreignKeyColumn) {
+    }
+
+    /** One incoming foreign key: {@code table.column} references some other table's column. */
+    record ReverseForeignKey(@NotNull String table, @NotNull String column) {
+    }
 }

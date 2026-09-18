@@ -22,6 +22,14 @@ import java.util.regex.Pattern;
 public final class GherkinPsiUtil {
 
     private static final String PROCESS_PREFIX = "Process: ";
+    // "(I )these values are (not )present in <table>" / "(I )this value is (not )present in
+    // <table>" - the DB step whose header-row table cells can contain
+    // join(...)/rejoin(...)/saveToContext(...) specs - see the com.pumpkin.intellij.dbstep
+    // package. Singular/plural pairing mirrors StoreContextValuesEnterHandler's own "these
+    // values|this value" alias handling; the negated ("not present") form is the same step shape,
+    // just asserting absence instead of presence.
+    private static final Pattern DB_PRESENT_STEP = Pattern.compile(
+            "(?:I\\s+)?(?:these values are|this value is)(?:\\s+not)? present in\\s+(.+)", Pattern.CASE_INSENSITIVE);
     // The step definitions expose two step patterns distinguished by this trailing text:
     // "^Process: (.*) with data$" (takes a DataTable) and "^Process: (.*) without data$" (no table).
     private static final String WITH_DATA_SUFFIX = " with data";
@@ -139,6 +147,20 @@ public final class GherkinPsiUtil {
     private static @NotNull String stripContextSuffix(@NotNull String invocation) {
         Matcher m = CONTEXT_SUFFIX_PATTERN.matcher(invocation);
         return m.matches() ? m.group(1) : invocation;
+    }
+
+    /** Returns {@code true} for a "these values are present in &lt;table&gt;" DB step. */
+    public static boolean isDbPresentStep(@NotNull GherkinStep step) {
+        String name = step.getName();
+        return name != null && DB_PRESENT_STEP.matcher(name.trim()).matches();
+    }
+
+    /** The table name after "present in", or {@code null} if this isn't a {@link #isDbPresentStep} step. */
+    public static @Nullable String getDbTableName(@NotNull GherkinStep step) {
+        String name = step.getName();
+        if (name == null) return null;
+        Matcher m = DB_PRESENT_STEP.matcher(name.trim());
+        return m.matches() ? m.group(1).trim() : null;
     }
 
     // -------------------------------------------------------------------------

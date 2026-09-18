@@ -22,6 +22,7 @@ public class PumpkinColorSettingsPage implements ColorSettingsPage {
             new AttributesDescriptor("Process variable value", PumpkinTextAttributeKeys.PROCESS_VARIABLE),
             new AttributesDescriptor("Process literal text", PumpkinTextAttributeKeys.PROCESS_TEXT),
             new AttributesDescriptor("Process context", PumpkinTextAttributeKeys.PROCESS_CONTEXT),
+            new AttributesDescriptor("DB step join/rejoin reference", PumpkinTextAttributeKeys.DB_REFERENCE),
     };
 
     @Override
@@ -38,7 +39,10 @@ public class PumpkinColorSettingsPage implements ColorSettingsPage {
     public @NotNull String getDemoText() {
         return "* <keyword>Process:</keyword> <text>Create customer</text> <variable>Hans</variable> <context>| MobileApp</context> <keyword>with data</keyword>\n" +
                "    | service | <variable>25736</variable>      |\n" +
-               "    | name    | <variable>Hans Peter</variable> |\n";
+               "    | name    | <variable>Hans Peter</variable> |\n" +
+               "* these values are present in customer\n" +
+               "    | join(id, <dbref>order.customerId</dbref>)                        |\n" +
+               "    | rejoin(<dbref>order</dbref>.customerId, <dbref>status</dbref>)    |\n";
     }
 
     @Override
@@ -47,7 +51,8 @@ public class PumpkinColorSettingsPage implements ColorSettingsPage {
                 "keyword", PumpkinTextAttributeKeys.PROCESS_KEYWORD,
                 "variable", PumpkinTextAttributeKeys.PROCESS_VARIABLE,
                 "text", PumpkinTextAttributeKeys.PROCESS_TEXT,
-                "context", PumpkinTextAttributeKeys.PROCESS_CONTEXT
+                "context", PumpkinTextAttributeKeys.PROCESS_CONTEXT,
+                "dbref", PumpkinTextAttributeKeys.DB_REFERENCE
         );
     }
 

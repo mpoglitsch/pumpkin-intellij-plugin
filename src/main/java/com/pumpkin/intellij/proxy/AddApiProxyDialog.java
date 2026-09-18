@@ -3,27 +3,43 @@ package com.pumpkin.intellij.proxy;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.ui.DialogWrapper;
 import com.intellij.openapi.ui.Messages;
+import com.intellij.openapi.ui.TextFieldWithBrowseButton;
 import com.intellij.openapi.ui.ValidationInfo;
+import com.intellij.openapi.ui.popup.JBPopupFactory;
 import com.intellij.psi.JavaPsiFacade;
 import com.intellij.psi.PsiClass;
 import com.intellij.psi.PsiField;
 import com.intellij.psi.search.GlobalSearchScope;
+import com.intellij.ui.SimpleListCellRenderer;
+import com.intellij.ui.ToolbarDecorator;
 import com.intellij.ui.components.JBTextField;
+import com.intellij.ui.table.JBTable;
 import com.intellij.util.ui.FormBuilder;
 import com.pumpkin.intellij.api.ApiEndpointResolver;
 import com.pumpkin.intellij.endpoint.NameUtils;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
+import javax.swing.AbstractCellEditor;
 import javax.swing.JComboBox;
 import javax.swing.JComponent;
 import javax.swing.JPanel;
+import javax.swing.JTable;
+import javax.swing.SwingUtilities;
+import javax.swing.table.DefaultTableModel;
+import javax.swing.table.TableCellEditor;
 import java.awt.BorderLayout;
 import java.awt.CardLayout;
+import java.awt.Component;
 import java.awt.Dimension;
 import java.awt.GridBagConstraints;
+import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 
 /** Popover for entering a new API proxy's name and authentication method; see {@link ApiProxyCodeGenerator} for what happens on OK. */
 public class AddApiProxyDialog extends DialogWrapper {
@@ -39,6 +55,10 @@ public class AddApiProxyDialog extends DialogWrapper {
     private final JPanel authFieldsPanel = new JPanel(new CardLayout());
     private final Map<AuthenticationMethod, Map<String, FieldRow>> fieldsByMethod = new LinkedHashMap<>();
 
+    private final List<String> environments;
+    private final DefaultTableModel environmentModel = new DefaultTableModel(new Object[]{"Environment", "Base URL"}, 0);
+    private final JBTable environmentTable = new JBTable(environmentModel);
+
     public AddApiProxyDialog(@NotNull Project project) {
         // MODELESS so the user can still click into the editor (e.g. to copy a context-parameter
         // or environment-variable name) while this dialog stays open, instead of having to close
@@ -53,8 +73,86 @@ public class AddApiProxyDialog extends DialogWrapper {
         authCombo.addActionListener(e -> showCardFor(selectedMethod()));
         showCardFor(selectedMethod());
 
+        this.environments = new ArrayList<>(EnvironmentResolver.findEnvironmentFiles(project).keySet());
+        setupEnvironmentTable();
+
         setTitle("Add API Proxy");
         init();
+    }
+
+    /**
+     * The "Environment" column is edited via {@link EnvironmentCellEditor} rather than a plain
+     * combo box - a project can have hundreds of environments (per {@link EnvironmentResolver}),
+     * and a combo box only lets you scroll or jump-to-prefix; a real filterable popup (same
+     * pattern as {@code AddEndpointDialog}'s own Proxy field) narrows live as you type instead.
+     */
+    private void setupEnvironmentTable() {
+        environmentTable.getColumnModel().getColumn(0).setCellEditor(new EnvironmentCellEditor());
+    }
+
+    /**
+     * Shows the current value as read-only text; clicking it (or its browse button) opens a
+     * filterable popup of every known environment - substring match, narrows live as you type,
+     * unlike a plain combo box's speed search. Mirrors {@code AddEndpointDialog}'s Proxy field,
+     * simplified since environment names are plain strings (no PSI-read-off-EDT concern a
+     * {@code PsiClass}-backed choice would need a wrapper record for).
+     */
+    private final class EnvironmentCellEditor extends AbstractCellEditor implements TableCellEditor {
+
+        private final TextFieldWithBrowseButton field = new TextFieldWithBrowseButton(e -> openPicker());
+
+        EnvironmentCellEditor() {
+            field.setEditable(false);
+        }
+
+        private void openPicker() {
+            if (environments.isEmpty()) return;
+            JBPopupFactory.getInstance()
+                    .createPopupChooserBuilder(environments)
+                    .setTitle("Choose Environment")
+                    .setRenderer(SimpleListCellRenderer.create("", s -> s))
+                    .setNamerForFiltering(s -> s)
+                    .setItemChosenCallback(choice -> {
+                        int row = environmentTable.getEditingRow();
+                        field.setText(choice);
+                        stopCellEditing();
+                        // Jump straight into this same row's Base URL column so the user can type
+                        // the value immediately - deferred a tick since this callback runs as part
+                        // of the popup's own closing/stopCellEditing's teardown, and starting a new
+                        // edit session synchronously inside that can be dropped.
+                        if (row >= 0) {
+                            SwingUtilities.invokeLater(() -> {
+                                environmentTable.changeSelection(row, 1, false, false);
+                                environmentTable.editCellAt(row, 1);
+                                Component editor = environmentTable.getEditorComponent();
+                                if (editor != null) {
+                                    editor.requestFocusInWindow();
+                                }
+                            });
+                        }
+                    })
+                    .createPopup()
+                    .showUnderneathOf(field);
+        }
+
+        @Override
+        public Object getCellEditorValue() {
+            return field.getText();
+        }
+
+        @Override
+        public Component getTableCellEditorComponent(JTable table, Object value, boolean isSelected,
+                                                      int row, int column) {
+            field.setText(value == null ? "" : value.toString());
+            // The click that starts editing a cell is consumed by the table itself to activate
+            // this editor - it never reaches a listener on the field, which is why only the
+            // browse button (its own distinct component) responded before. Opening the picker
+            // here, right as editing begins, means clicking anywhere in the cell opens it -
+            // deferred via invokeLater so the field is actually laid out/visible on screen first,
+            // which showUnderneathOf(field) needs to anchor the popup correctly.
+            SwingUtilities.invokeLater(this::openPicker);
+            return field;
+        }
     }
 
     private void buildAuthFieldsPanel() {
@@ -86,6 +184,25 @@ public class AddApiProxyDialog extends DialogWrapper {
         ((CardLayout) authFieldsPanel.getLayout()).show(authFieldsPanel, method.name());
     }
 
+    /** Mirrors {@code AddEndpointDialog.wrapTable}'s own add/remove-row table decoration. */
+    private @NotNull JComponent wrapEnvironmentTable() {
+        environmentTable.setPreferredScrollableViewportSize(new Dimension(560, 90));
+        return ToolbarDecorator.createDecorator(environmentTable)
+                .setAddAction(button -> environmentModel.addRow(new Object[]{"", ""}))
+                .setRemoveAction(button -> removeSelectedEnvironmentRows())
+                .createPanel();
+    }
+
+    private void removeSelectedEnvironmentRows() {
+        if (environmentTable.isEditing()) {
+            environmentTable.getCellEditor().stopCellEditing();
+        }
+        int[] rows = environmentTable.getSelectedRows();
+        for (int i = rows.length - 1; i >= 0; i--) {
+            environmentModel.removeRow(rows[i]);
+        }
+    }
+
     /** Validate as soon as the dialog opens (and continuously after), instead of only on first OK click. */
     @Override
     protected boolean postponeValidation() {
@@ -102,6 +219,9 @@ public class AddApiProxyDialog extends DialogWrapper {
         };
         builder.addLabeledComponent("Proxy name:", nameField)
                 .addTooltip("e.g. My Api -> ApiNotation.MY_API/MyApiProxy)")
+                .addLabeledComponentFillVertically("Base URL by environment:", wrapEnvironmentTable())
+                .addTooltip("Optional - appends baseUrlProperty=<Base URL> to each environment's "
+                        + "own testsuite_configuration_<environment>.properties file")
                 .addLabeledComponent("Authentication:", authCombo)
                 .addComponent(authFieldsPanel);
 
@@ -159,6 +279,23 @@ public class AddApiProxyDialog extends DialogWrapper {
             }
         }
 
+        Set<String> seenEnvironments = new HashSet<>();
+        for (int i = 0; i < environmentModel.getRowCount(); i++) {
+            String env = String.valueOf(environmentModel.getValueAt(i, 0)).trim();
+            String url = String.valueOf(environmentModel.getValueAt(i, 1)).trim();
+            if (env.isEmpty() && url.isEmpty()) continue; // fully blank row - ignored, not an error
+
+            if (env.isEmpty()) {
+                return new ValidationInfo("Select an environment for this row.", environmentTable);
+            }
+            if (url.isEmpty()) {
+                return new ValidationInfo("Enter a Base URL for " + env + ".", environmentTable);
+            }
+            if (!seenEnvironments.add(env.toLowerCase(Locale.ROOT))) {
+                return new ValidationInfo("Duplicate environment: " + env, environmentTable);
+            }
+        }
+
         return null;
     }
 
@@ -176,7 +313,16 @@ public class AddApiProxyDialog extends DialogWrapper {
                     source != null ? source : FieldValueSource.CONTEXT_PARAMETER));
         }
 
-        return new NewApiProxySpec(name, method, values);
+        List<EnvironmentBaseUrl> environmentBaseUrls = new ArrayList<>();
+        for (int i = 0; i < environmentModel.getRowCount(); i++) {
+            String env = String.valueOf(environmentModel.getValueAt(i, 0)).trim();
+            String url = String.valueOf(environmentModel.getValueAt(i, 1)).trim();
+            if (!env.isEmpty() && !url.isEmpty()) {
+                environmentBaseUrls.add(new EnvironmentBaseUrl(env, url));
+            }
+        }
+
+        return new NewApiProxySpec(name, method, values, environmentBaseUrls);
     }
 
     /**

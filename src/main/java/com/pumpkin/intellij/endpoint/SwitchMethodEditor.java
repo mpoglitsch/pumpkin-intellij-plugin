@@ -36,7 +36,7 @@ public final class SwitchMethodEditor {
      * method (built from {@code fullMethodTextIfMissing}) right before the class's closing
      * brace.
      */
-    static void upsertCase(@NotNull Project project, @NotNull PsiClass proxyClass,
+    public static void upsertCase(@NotNull Project project, @NotNull PsiClass proxyClass,
                            @NotNull String methodName, @NotNull String fullMethodTextIfMissing,
                            @NotNull String caseTextIfPresent) {
         PsiMethod method = findMethod(proxyClass, methodName);
@@ -71,8 +71,12 @@ public final class SwitchMethodEditor {
         return null;
     }
 
-    /** Appends a whole new method's text right before {@code proxyClass}'s closing brace. */
-    static void appendMethod(@NotNull Project project, @NotNull PsiClass proxyClass,
+    /**
+     * Appends arbitrary member text (a whole new method, or - reused by {@code
+     * PostProcessorCodeGenerator} - a single field declaration) right before {@code proxyClass}'s
+     * closing brace.
+     */
+    public static void appendMethod(@NotNull Project project, @NotNull PsiClass proxyClass,
                              @NotNull String methodText) {
         PsiFile file = proxyClass.getContainingFile();
         Document doc = PsiDocumentManager.getInstance(project).getDocument(file);
@@ -87,6 +91,82 @@ public final class SwitchMethodEditor {
         String textToInsert = "\n" + indent + methodText.replace("\n", "\n" + indent) + "\n\n";
         doc.insertString(insertOffset, textToInsert);
         commitAndReformat(project, doc, file, insertOffset, insertOffset + textToInsert.length());
+    }
+
+    /**
+     * If the case immediately before {@code method}'s switch's {@code default:} label doesn't
+     * already end in a control-flow-terminating statement (return/break/throw/continue), appends
+     * {@code terminatorText} (e.g. {@code "return;"}) right after its last statement. Without
+     * this, a new case spliced in afterward via {@link #upsertCase}/{@link
+     * #insertCaseBeforeDefault} - which always inserts right before {@code default:} - would let
+     * whatever case used to be last silently fall through into it, since that case previously had
+     * no need to terminate (there was nothing after it but {@code default:}).
+     *
+     * <p>Returns {@code true} if a terminator was actually inserted - meaning any {@link
+     * PsiMethod}/{@link PsiClass} handle for this file obtained before this call is now stale and
+     * must be re-fetched, per this class's own doc. Callers are responsible for picking a {@code
+     * terminatorText} valid for the enclosing method's return type (a bare {@code "return;"} for
+     * a {@code void} method) - this makes no attempt to synthesize a meaningful non-void return
+     * value, so it's only safe to use for {@code void} switch methods like {@code postProcess}.
+     */
+    public static boolean ensurePreviousCaseTerminates(@NotNull Project project, @NotNull PsiMethod method,
+                                                       @NotNull String terminatorText) {
+        PsiCodeBlock body = method.getBody();
+        if (body == null) return false;
+        PsiSwitchBlock switchBlock = PsiTreeUtil.findChildOfType(body, PsiSwitchBlock.class);
+        if (switchBlock == null) return false;
+        PsiCodeBlock switchBody = switchBlock.getBody();
+        if (switchBody == null) return false;
+
+        PsiStatement[] statements = switchBody.getStatements();
+        int defaultIndex = -1;
+        for (int i = 0; i < statements.length; i++) {
+            if (isDefaultLabel(statements[i])) {
+                defaultIndex = i;
+                break;
+            }
+        }
+        if (defaultIndex <= 0) return false; // no default label, or nothing precedes it to check
+
+        PsiStatement lastBeforeDefault = statements[defaultIndex - 1];
+        // An empty "case FOO:" label with no statements of its own directly before default (an
+        // intentional or accidental fallthrough-to-default) has nothing to append a terminator
+        // after in a meaningful place - leave it alone rather than guessing.
+        if (lastBeforeDefault instanceof PsiSwitchLabelStatement || lastBeforeDefault instanceof PsiSwitchLabeledRuleStatement) {
+            return false;
+        }
+        if (isTerminating(lastBeforeDefault)) return false;
+
+        PsiFile file = method.getContainingFile();
+        Document doc = PsiDocumentManager.getInstance(project).getDocument(file);
+        if (doc == null) return false;
+
+        int insertOffset = lastBeforeDefault.getTextRange().getEndOffset();
+        String indent = indentOf(doc.getText(), lastBeforeDefault.getTextRange().getStartOffset());
+        String textToInsert = "\n" + indent + terminatorText;
+
+        doc.insertString(insertOffset, textToInsert);
+        commitAndReformat(project, doc, file, insertOffset, insertOffset + textToInsert.length());
+        return true;
+    }
+
+    private static boolean isDefaultLabel(@NotNull PsiStatement stmt) {
+        if (stmt instanceof PsiSwitchLabeledRuleStatement rule) return rule.isDefaultCase();
+        if (stmt instanceof PsiSwitchLabelStatement label) return label.isDefaultCase();
+        return false;
+    }
+
+    /** Whether {@code stmt} unconditionally transfers control away, so nothing after it in the same case can run. */
+    private static boolean isTerminating(@NotNull PsiStatement stmt) {
+        if (stmt instanceof PsiReturnStatement || stmt instanceof PsiBreakStatement
+                || stmt instanceof PsiThrowStatement || stmt instanceof PsiContinueStatement) {
+            return true;
+        }
+        if (stmt instanceof PsiBlockStatement block) {
+            PsiStatement[] inner = block.getCodeBlock().getStatements();
+            return inner.length > 0 && isTerminating(inner[inner.length - 1]);
+        }
+        return false;
     }
 
     /**
@@ -132,7 +212,7 @@ public final class SwitchMethodEditor {
      * Inserts {@code import fqn;} right after the last existing import (or the package
      * statement) if {@code file} doesn't already import it.
      */
-    static void ensureImport(@NotNull Project project, @NotNull PsiJavaFile file, @NotNull String fqn) {
+    public static void ensureImport(@NotNull Project project, @NotNull PsiJavaFile file, @NotNull String fqn) {
         PsiImportList importList = file.getImportList();
         if (importList != null && importList.findSingleClassImportStatement(fqn) != null) return;
 

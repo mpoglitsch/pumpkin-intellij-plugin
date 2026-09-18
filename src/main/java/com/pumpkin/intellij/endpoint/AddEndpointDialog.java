@@ -13,7 +13,6 @@ import com.intellij.openapi.ui.popup.JBPopupFactory;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.psi.PsiClass;
 import com.intellij.ui.EditorTextField;
-import com.intellij.ui.LanguageTextField;
 import com.intellij.ui.SimpleListCellRenderer;
 import com.intellij.ui.ToolbarDecorator;
 import com.intellij.ui.components.JBLabel;
@@ -21,6 +20,7 @@ import com.intellij.ui.components.JBTextField;
 import com.intellij.ui.table.JBTable;
 import com.intellij.util.ui.FormBuilder;
 import com.pumpkin.intellij.api.ApiEndpointResolver;
+import com.pumpkin.intellij.ui.ScrollableLanguageTextField;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -94,8 +94,7 @@ public class AddEndpointDialog extends DialogWrapper {
             selectProxy(proxyChoices.get(0));
         }
 
-        this.bodyField = new LanguageTextField(JsonLanguage.INSTANCE, project, "", false);
-        bodyField.setOneLineMode(false);
+        this.bodyField = new ScrollableLanguageTextField(JsonLanguage.INSTANCE, project, "");
         bodyField.setPreferredSize(new Dimension(480, 180));
         pathField.getEmptyText().setText("/my/entered/path/with/{variable}");
 

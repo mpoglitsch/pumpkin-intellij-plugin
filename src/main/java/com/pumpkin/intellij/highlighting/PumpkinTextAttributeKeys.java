@@ -50,5 +50,18 @@ public final class PumpkinTextAttributeKeys {
                     DefaultLanguageHighlighterColors.KEYWORD
             );
 
+    /**
+     * Applied to the external table/column reference actually being tested inside a DB-step
+     * header cell's {@code join(...)}/{@code rejoin(...)} spec: the whole {@code table.column}
+     * argument for {@code join(column, table.column)}, and both {@code table1} (not {@code
+     * column1}, the purely structural FK-linking column) and {@code column2} for {@code
+     * rejoin(table1.column1, column2)}.
+     */
+    public static final TextAttributesKey DB_REFERENCE =
+            TextAttributesKey.createTextAttributesKey(
+                    "PUMPKIN_DB_REFERENCE",
+                    DefaultLanguageHighlighterColors.STRING
+            );
+
     private PumpkinTextAttributeKeys() {}
 }

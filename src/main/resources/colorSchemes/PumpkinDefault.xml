@@ -16,4 +16,10 @@
       <option name="FONT_TYPE" value="1"/>
     </value>
   </option>
+  <option name="PUMPKIN_DB_REFERENCE">
+    <value>
+      <option name="FOREGROUND" value="6a8759"/>
+      <option name="FONT_TYPE" value="2"/>
+    </value>
+  </option>
 </list>

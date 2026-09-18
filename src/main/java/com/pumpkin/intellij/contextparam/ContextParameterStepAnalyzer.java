@@ -33,9 +33,6 @@ final class ContextParameterStepAnalyzer {
     private static final Pattern STORE_STEP = Pattern.compile(
             "(?:I\\s+)?store (?:these values|this value) in context", Pattern.CASE_INSENSITIVE);
 
-    private static final Pattern DB_STEP = Pattern.compile(
-            "(?:I\\s+)?these values are present in\\s+.+", Pattern.CASE_INSENSITIVE);
-
     // Matches a saveToContext(...) header cell wherever it appears; the second group is the
     // context-parameter name it declares. Can occur zero or more times across a table's header
     // cells, in any column.
@@ -83,7 +80,7 @@ final class ContextParameterStepAnalyzer {
         if (STORE_STEP.matcher(trimmed).matches()) {
             return directEvent(step, storeStepParamNames(step.getTable()));
         }
-        if (DB_STEP.matcher(trimmed).matches()) {
+        if (GherkinPsiUtil.isDbPresentStep(step)) {
             return directEvent(step, dbStepParamNames(step.getTable()));
         }
 
