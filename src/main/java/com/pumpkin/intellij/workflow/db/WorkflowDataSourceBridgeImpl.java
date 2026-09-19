@@ -18,6 +18,7 @@ import com.intellij.database.util.GuardedRef;
 import com.intellij.openapi.progress.EmptyProgressIndicator;
 import com.intellij.openapi.progress.ProgressManager;
 import com.intellij.openapi.project.Project;
+import com.pumpkin.intellij.workflow.ProcessedWorkflowItemRow;
 import com.pumpkin.intellij.workflow.PumpkinDataSourceRef;
 import com.pumpkin.intellij.workflow.ScenarioMatch;
 import com.pumpkin.intellij.workflow.WorkflowDataSourceBridge;
@@ -82,6 +83,39 @@ public final class WorkflowDataSourceBridgeImpl implements WorkflowDataSourceBri
             + "        ) wrc ON wrc.workflowitems_2_workflow = i2w.id\n"
             + "where w.id = ? and i2w.scenario = ?\n"
             + "order by i2w.sort_order";
+
+    // "?" = a d_workflows.id (an actually-processed workflow instance) - the recursive
+    // subworkflow lookup reuses this exact query with a row's own "subworkflow" as the next "?".
+    // "status" (ks.id) is always the WORKFLOW ITEM's own status; "workflow_status" (ksw.id) is the
+    // surrounding WORKFLOW INSTANCE's own status, constant across every row like workflow_id/name.
+    private static final String FIND_PROCESSED_WORKFLOW_ITEMS_SQL =
+            "select i.id as workflowitem_id,\n"
+            + "    i.workflowitem as workflowitem_name,\n"
+            + "    ww.id as workflow_id,\n"
+            + "    ww.workflow as workflow_name,\n"
+            + "    ks.id as status,\n"
+            + "    wrc.description as returncode,\n"
+            + "    sub.id as subworkflow,\n"
+            + "    it.content_outgoing,\n"
+            + "    t.object_type,\n"
+            + "    o.object,\n"
+            + "    ksw.id as workflow_status\n"
+            + "from d_workflowitems wi\n"
+            + "    left join if_transactions it on it.entity_id = wi.id and it.entity = wi.entity\n"
+            + "    left join if_transaction_objects_types t on t.id = it.object_type\n"
+            + "    left join if_transaction_objects o on o.id = t.object\n"
+            + "    join d_workflows w on w.id = wi.workflow\n"
+            + "    join k_status ksw on ksw.entity = w.entity and ksw.id = w.status\n"
+            + "    join w_workflows ww on ww.id = w.workflow\n"
+            + "    join k_status ks on ks.entity = wi.entity and ks.id = wi.status\n"
+            + "    join w_workflowitems i on i.id = wi.workflowitem\n"
+            + "    join w_items_2_workflows iw on iw.workflowitem = i.id and iw.workflow = w.workflow"
+            + " and iw.scenario = w.scenario\n"
+            + "    left join w_wfitems_wf_return_codes wrc on wrc.workflowitems_2_workflow = iw.id"
+            + " and wrc.return_code = wi.return_code\n"
+            + "    left join d_workflows sub on sub.id = wi.subworkflow\n"
+            + "where w.id = ?\n"
+            + "order by iw.sort_order";
 
     @Override
     public @NotNull List<PumpkinDataSourceRef> listDataSources(@NotNull Project project) {
@@ -149,6 +183,50 @@ public final class WorkflowDataSourceBridgeImpl implements WorkflowDataSourceBri
         } catch (RemoteException e) {
             throw new SQLException(
                     "Lost connection to " + dataSource.displayName() + " while finding workflow items.", e);
+        }
+        return result;
+    }
+
+    @Override
+    public @NotNull List<ProcessedWorkflowItemRow> findProcessedWorkflowItems(@NotNull Project project,
+            @NotNull PumpkinDataSourceRef dataSource, long workflowInstanceId) throws SQLException {
+
+        List<ProcessedWorkflowItemRow> result = new ArrayList<>();
+        try (GuardedRef<DatabaseConnection> ref = openConnection(project, dataSource)) {
+            RemoteConnection remote = ref.get().getRemoteConnection();
+            RemotePreparedStatement stmt = remote.prepareStatement(FIND_PROCESSED_WORKFLOW_ITEMS_SQL);
+            try {
+                stmt.setLong(1, workflowInstanceId);
+                RemoteResultSet rs = stmt.executeQuery();
+                try {
+                    while (rs.next()) {
+                        // getLong(...) returns 0 for a SQL NULL - wasNull() (checked immediately
+                        // after, reflecting this same column read) is the only reliable way to
+                        // tell that apart from an actual 0 value.
+                        long subworkflow = rs.getLong("subworkflow");
+                        Long subworkflowId = rs.wasNull() ? null : subworkflow;
+                        result.add(new ProcessedWorkflowItemRow(
+                                rs.getLong("workflowitem_id"),
+                                rs.getString("workflowitem_name"),
+                                rs.getLong("workflow_id"),
+                                rs.getString("workflow_name"),
+                                rs.getLong("status"),
+                                rs.getString("returncode"),
+                                subworkflowId,
+                                rs.getString("content_outgoing"),
+                                rs.getString("object_type"),
+                                rs.getString("object"),
+                                rs.getLong("workflow_status")));
+                    }
+                } finally {
+                    rs.close();
+                }
+            } finally {
+                stmt.close();
+            }
+        } catch (RemoteException e) {
+            throw new SQLException(
+                    "Lost connection to " + dataSource.displayName() + " while finding processed workflow items.", e);
         }
         return result;
     }

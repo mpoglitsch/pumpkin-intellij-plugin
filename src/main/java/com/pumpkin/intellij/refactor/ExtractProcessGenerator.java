@@ -8,12 +8,12 @@ import com.intellij.openapi.project.Project;
 import com.intellij.openapi.vfs.VfsUtil;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.pumpkin.intellij.endpoint.NameUtils;
+import com.pumpkin.intellij.util.FeatureFilePaths;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.jetbrains.plugins.cucumber.psi.GherkinStep;
 
 import java.io.IOException;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -51,7 +51,7 @@ final class ExtractProcessGenerator {
         GherkinStep lastStep = steps.get(steps.size() - 1);
 
         VirtualFile currentFile = firstStep.getContainingFile().getVirtualFile();
-        VirtualFile anchorDir = currentFile == null ? null : resolveProcessesAnchorDir(currentFile);
+        VirtualFile anchorDir = currentFile == null ? null : FeatureFilePaths.resolveDirTwoLevelsBelowFeatures(currentFile);
         if (anchorDir == null) {
             throw new IllegalStateException(
                     "Could not find a \"features\" ancestor directory at least two levels above this file.");
@@ -109,27 +109,4 @@ final class ExtractProcessGenerator {
         return m.find() ? m.group(1) : "Given";
     }
 
-    /**
-     * Returns the directory exactly two levels below the nearest ancestor directory literally
-     * named {@code features} (case-insensitive) on the path to {@code file} - or {@code null} if
-     * no such ancestor exists, or the file isn't nested at least two levels below it.
-     *
-     * <p>Confirmed with the user: regardless of how many more subdirectories exist between that
-     * point and the file itself, the {@code _processes} folder always belongs at this exact
-     * depth - e.g. for {@code features/aax/XXX/YYY/some.feature}, this resolves to
-     * {@code features/aax/XXX} (not {@code YYY}, the file's own immediate parent).
-     */
-    private static @Nullable VirtualFile resolveProcessesAnchorDir(@NotNull VirtualFile file) {
-        List<VirtualFile> chain = new ArrayList<>(); // deepest (file's own parent) first
-        for (VirtualFile dir = file.getParent(); dir != null; dir = dir.getParent()) {
-            chain.add(dir);
-            if ("features".equalsIgnoreCase(dir.getName())) break;
-        }
-        if (chain.isEmpty() || !"features".equalsIgnoreCase(chain.get(chain.size() - 1).getName())) {
-            return null;
-        }
-
-        int levelTwoIndex = chain.size() - 3; // chain.size()-1 is "features" itself, -2 is level 1
-        return levelTwoIndex >= 0 ? chain.get(levelTwoIndex) : null;
-    }
 }

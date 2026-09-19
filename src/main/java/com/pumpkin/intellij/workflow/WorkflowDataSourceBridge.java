@@ -43,6 +43,17 @@ public interface WorkflowDataSourceBridge {
     @NotNull List<WorkflowItemRow> findWorkflowItems(@NotNull Project project,
             @NotNull PumpkinDataSourceRef dataSource, long workflowId, long scenarioId) throws SQLException;
 
+    /**
+     * Runs the "what actually happened" lookup (see {@link ProcessedWorkflowItemRow}) for one
+     * actually-processed workflow instance (a {@code d_workflows.id}), one row per workflow item
+     * in {@code iw.sort_order}, backing the {@code dwf:<datasource>:<includePayloadSteps>:
+     * <workflow instance id>} shortcut. Must be called off the EDT - this blocks on a real
+     * database round trip. A row's {@code subworkflowId}, when present, is itself a
+     * {@code d_workflows.id} suitable for a recursive call to this same method.
+     */
+    @NotNull List<ProcessedWorkflowItemRow> findProcessedWorkflowItems(@NotNull Project project,
+            @NotNull PumpkinDataSourceRef dataSource, long workflowInstanceId) throws SQLException;
+
     /** Every table name in {@code dataSource}'s introspected schema, for the DB-step autocomplete. */
     @NotNull List<String> listTables(@NotNull Project project, @NotNull PumpkinDataSourceRef dataSource);
 

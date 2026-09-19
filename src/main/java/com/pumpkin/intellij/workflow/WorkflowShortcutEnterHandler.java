@@ -16,11 +16,17 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * Pressing Enter right after typing {@code wf:<workflow id>} on its own line (optionally after a
- * step keyword, e.g. {@code * wf:123}) - similar in spirit to Java's {@code psvm} live template -
- * generates that workflow's assertion steps directly into the document instead of inserting a
- * plain newline. See {@link WorkflowShortcutTypedHandler} for the visual hint shown while typing,
- * and {@link WorkflowShortcutGenerator} for what happens after Enter is pressed.
+ * Pressing Enter right after typing {@code wf:<workflow id>} (optionally prefixed with a
+ * datasource, {@code wf:<datasource>:<workflow id>} - see {@link WorkflowShortcutTypedHandler}'s
+ * chained popup) on its own line (optionally after a step keyword, e.g. {@code * wf:123}) -
+ * similar in spirit to Java's {@code psvm} live template - generates that workflow's assertion
+ * steps directly into the document instead of inserting a plain newline. See {@link
+ * WorkflowShortcutGenerator} for what happens after Enter is pressed.
+ *
+ * <p>The datasource segment is optional for backward compatibility: a bare {@code wf:123} (typed
+ * directly, or left over from dismissing the datasource popup) still works exactly as before,
+ * falling back to {@code PumpkinSettingsState.workflowAssertionDataSourceId} - see {@link
+ * WorkflowShortcutGenerator#generateAsync}.
  *
  * <p>Deliberately not implemented via a completion popup: IntelliJ's completion auto-popup only
  * triggers after characters it considers identifier-like, and a bare {@code :} doesn't qualify -
@@ -29,8 +35,8 @@ import java.util.regex.Pattern;
  */
 public class WorkflowShortcutEnterHandler implements EnterHandlerDelegate {
 
-    static final Pattern TRIGGER =
-            Pattern.compile("(?:(?:Given|When|Then|And|But|\\*)\\s+)?wf:(\\d+)", Pattern.CASE_INSENSITIVE);
+    static final Pattern TRIGGER = Pattern.compile(
+            "(?:(?:Given|When|Then|And|But|\\*)\\s+)?wf:(?:([^:]+):)?(\\d+)", Pattern.CASE_INSENSITIVE);
 
     @Override
     public Result preprocessEnter(@NotNull PsiFile file, @NotNull Editor editor,
@@ -48,8 +54,9 @@ public class WorkflowShortcutEnterHandler implements EnterHandlerDelegate {
         Matcher m = TRIGGER.matcher(linePrefix);
         if (!m.matches()) return Result.Continue;
 
-        long workflowId = Long.parseLong(m.group(1));
-        WorkflowShortcutGenerator.trigger(file.getProject(), document, lineStart, caretOffset, workflowId);
+        String dataSourceName = m.group(1); // nullable - falls back to the stored setting
+        long workflowId = Long.parseLong(m.group(2));
+        WorkflowShortcutGenerator.trigger(file.getProject(), document, lineStart, caretOffset, workflowId, dataSourceName);
 
         return Result.Stop;
     }
