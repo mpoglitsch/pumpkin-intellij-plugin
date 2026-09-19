@@ -14,6 +14,9 @@ out/
 .sts4-cache
 .gradle
 build
+# IntelliJ Platform Gradle Plugin 2.x's sandbox/cache directory (replaces the 1.x plugin's own
+# build/idea-sandbox, still under build/ and already ignored above).
+.intellijPlatform
 bin/
 !**/src/main/**/bin/
 !**/src/test/**/bin/
